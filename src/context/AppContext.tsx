@@ -10,8 +10,6 @@ import {
 import {
   getAllClients,
   getLatestPromptForClient,
-  saveClientBrief,
-  saveGeneratedPrompt,
 } from "@/lib/firestore";
 
 interface AppContextType {
@@ -63,53 +61,87 @@ const defaultBrief: ClientBrief = {
 };
 
 const defaultSettings: AppSettings = {
-  model: "gemini-3.8-flash",
+  model: "gemini-3.1-flash-lite",
   enableThinking: true,
 };
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [theme, setTheme] = useState<"dark" | "light">(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const savedTheme = localStorage.getItem("briefcraft_theme_v1") as "dark" | "light";
+        if (savedTheme === "dark" || savedTheme === "light") return savedTheme;
+      } catch {
+        // ignore
+      }
+    }
+    return "dark";
+  });
+
   const [activeBrief, setActiveBrief] = useState<ClientBrief>(() => ({
     ...defaultBrief,
     id: `client_${Date.now()}`,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   }));
+
   const [currentResult, setCurrentResult] = useState<GeneratedPromptData | null>(null);
+
   const [generationState, setGenerationState] = useState<GenerationStepState>({
     step: "idle",
+    currentStepNumber: 0,
+    totalSteps: 3,
     message: "",
     progressPercent: 0,
   });
+
   const [clientsList, setClientsList] = useState<ClientBrief[]>([]);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isRegenerateOpen, setIsRegenerateOpen] = useState(false);
-  const [settings, setSettings] = useState<AppSettings>(defaultSettings);
+
+  const [settings, setSettings] = useState<AppSettings>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const savedSettings = localStorage.getItem("briefcraft_settings_v1");
+        if (savedSettings) {
+          const parsed = JSON.parse(savedSettings);
+          const validModels = ["gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-3.7-flash"];
+          if (!validModels.includes(parsed.model)) {
+            parsed.model = "gemini-3.1-flash-lite";
+          }
+          return parsed;
+        }
+      } catch {
+        // ignore
+      }
+    }
+    return defaultSettings;
+  });
+
   const [currentView, setCurrentView] = useState<"wizard" | "results">("wizard");
+
+  const refreshClientsList = async () => {
+    const list = await getAllClients();
+    setClientsList(list);
+  };
 
   // Load saved settings & client list on mount
   useEffect(() => {
-    // Initialize Firebase Analytics on browser mount
+    let active = true;
     import("@/lib/firebase").then(({ getFirebaseAnalytics }) => {
       getFirebaseAnalytics();
     });
-
-    try {
-      const savedSettings = localStorage.getItem("briefcraft_settings_v1");
-      if (savedSettings) {
-        setSettings(JSON.parse(savedSettings));
+    void getAllClients().then((list) => {
+      if (active) {
+        setClientsList(list);
       }
-      const savedTheme = localStorage.getItem("briefcraft_theme_v1") as "dark" | "light";
-      if (savedTheme) {
-        setTheme(savedTheme);
-      }
-    } catch (e) {
-      console.warn("Storage read error:", e);
-    }
-    refreshClientsList();
+    });
+    return () => {
+      active = false;
+    };
   }, []);
 
   // Sync theme class to document body
@@ -149,11 +181,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setActiveBrief(newBrief);
     setCurrentResult(null);
     setCurrentView("wizard");
-  };
-
-  const refreshClientsList = async () => {
-    const list = await getAllClients();
-    setClientsList(list);
   };
 
   const loadBriefAndPrompt = async (clientId: string) => {

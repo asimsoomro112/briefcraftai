@@ -1,16 +1,16 @@
 import { NextRequest } from "next/server";
-import { runStageBSynthesis } from "@/lib/gemini";
-import { ClientBrief, GeneratedPromptData, ResearchNotes } from "@/types";
+import { runSynthesis } from "@/lib/gemini";
+import { ClientBrief, GeneratedPromptData, ResearchNotes, GeminiModelId } from "@/types";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60; // Max execution time for Vercel Serverless Functions
+export const maxDuration = 90;
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { brief, researchNotes, model = "gemini-3.8-flash" } = body as {
+  const { brief, researchNotes, model = "gemini-3.1-flash-lite" } = body as {
     brief: ClientBrief;
     researchNotes: ResearchNotes;
-    model?: "gemini-3.8-flash" | "gemini-3.1-pro-preview";
+    model?: GeminiModelId;
   };
 
   if (!brief || !researchNotes) {
@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
   const stream = new TransformStream();
   const writer = stream.writable.getWriter();
 
-  const send = async (data: any) => {
+  const send = async (data: unknown) => {
     try {
       await writer.write(encoder.encode(JSON.stringify(data) + "\n"));
     } catch {}
@@ -35,27 +35,34 @@ export async function POST(req: NextRequest) {
     try {
       await send({
         type: "progress",
-        step: "stageB",
+        stepNumber: 3,
+        totalSteps: 3,
         message: `Re-synthesizing build prompt with your updated directives...`,
         progressPercent: 40,
       });
 
       const options = {
-        model,
+        preferredModel: model,
         customApiKey: clientApiKey,
-        onProgress: async (update: any) => {
+        onProgress: async (update: {
+          isWaiting?: boolean;
+          message: string;
+          waitSecondsRemaining?: number;
+          stepNumber?: number;
+        }) => {
           await send({
-            type: "progress",
-            step: update.step,
+            type: update.isWaiting ? "waiting" : "progress",
+            stepNumber: 3,
+            totalSteps: 3,
             message: update.message,
-            isRetrying: update.isRetrying,
+            waitSecondsRemaining: update.waitSecondsRemaining,
             progressPercent: 60,
           });
         },
       };
 
-      // Run Stage B only
-      const synthesis = await runStageBSynthesis(brief, researchNotes, options);
+      // Run Stage B Synthesis with scheduler & rotation
+      const synthesis = await runSynthesis(brief, researchNotes, options);
 
       const promptId = `prompt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
       const fullResult: GeneratedPromptData = {
@@ -69,16 +76,16 @@ export async function POST(req: NextRequest) {
         type: "complete",
         data: fullResult,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("API /api/regenerate pipeline error:", error);
-      const rawMsg = error?.message || "";
+      const rawMsg = error instanceof Error ? error.message : String(error);
       let friendlyMsg = rawMsg;
       if (rawMsg.includes("quota") || rawMsg.includes("RESOURCE_EXHAUSTED") || rawMsg.includes("429")) {
-        friendlyMsg = "Gemini API key quota limit reached. Please enter your personal Google AI Studio API key to continue generating.";
+        friendlyMsg = "Gemini API key quota limit reached. Please check back after Pacific midnight.";
       } else if (rawMsg.includes("API_KEY_INVALID") || rawMsg.includes("invalid") || rawMsg.includes("403")) {
-        friendlyMsg = "Invalid Gemini API key. Please check your API key or enter a valid Google AI Studio key.";
+        friendlyMsg = "Invalid Gemini API key. Please check your credentials in .env.local.";
       } else if (rawMsg.includes("heavy load") || rawMsg.includes("503") || rawMsg.includes("UNAVAILABLE")) {
-        friendlyMsg = "Gemini is under heavy load right now, please try again in a minute.";
+        friendlyMsg = "Gemini is under heavy load right now, retrying...";
       } else if (!friendlyMsg) {
         friendlyMsg = "Internal server error in regeneration pipeline.";
       }

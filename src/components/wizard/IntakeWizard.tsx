@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useApp } from "@/context/AppContext";
-import { SiteGoal } from "@/types";
+import { SiteGoal, PipelineJobState, GeneratedPromptData } from "@/types";
 import { saveClientBrief, saveGeneratedPrompt } from "@/lib/firestore";
 import {
   Sparkles,
@@ -17,12 +17,14 @@ import {
   Layout,
   Sliders,
   Target,
-  FileCode,
   Layers,
   Clock,
   ExternalLink,
   Flame,
   Key,
+  Hourglass,
+  RefreshCw,
+  AlertTriangle,
 } from "lucide-react";
 
 const STANDARD_TONES = [
@@ -84,8 +86,47 @@ export function IntakeWizard() {
   const [customFeatureInput, setCustomFeatureInput] = useState("");
   const [customKeyInput, setCustomKeyInput] = useState(settings.customApiKey || "");
   const [keySavedNotice, setKeySavedNotice] = useState(false);
+  const [activeCheckpoint, setActiveCheckpoint] = useState<PipelineJobState | null>(null);
 
   const totalSteps = 7;
+
+  // Poll / check for saved resumable checkpoint for active brief
+  useEffect(() => {
+    let active = true;
+    if (!activeBrief.id) return;
+
+    fetch(`/api/pipeline?briefId=${activeBrief.id}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (!active) return;
+        if (data?.jobState && data.jobState.status !== "completed") {
+          setActiveCheckpoint(data.jobState);
+        } else {
+          setActiveCheckpoint(null);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      active = false;
+    };
+  }, [activeBrief.id]);
+
+  // Proactive rate-limiter 1-second live countdown ticker
+  useEffect(() => {
+    if (!generationState.isWaiting || !generationState.waitSecondsRemaining || generationState.waitSecondsRemaining <= 0) {
+      return;
+    }
+    const timer = setInterval(() => {
+      setGenerationState((prev) => {
+        if (!prev.waitSecondsRemaining || prev.waitSecondsRemaining <= 1) {
+          return { ...prev, isWaiting: false, waitSecondsRemaining: 0 };
+        }
+        return { ...prev, waitSecondsRemaining: prev.waitSecondsRemaining - 1 };
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [generationState.isWaiting, generationState.waitSecondsRemaining, setGenerationState]);
 
   // Presets for quick 1-click test
   const loadPreset = (presetType: "jewelry" | "saas" | "architect") => {
@@ -252,9 +293,13 @@ export function IntakeWizard() {
 
     try {
       setGenerationState({
-        step: "stageA_research",
-        message: "Stage A: Researching live 2026 web design & tech landscape for " + activeBrief.industry + "...",
-        progressPercent: 20,
+        step: "running",
+        currentStepNumber: 1,
+        totalSteps: 3,
+        message: "Initializing Gemini 3 zero-billing pipeline for " + activeBrief.industry + "...",
+        progressPercent: 15,
+        isWaiting: false,
+        isQuotaWall: false,
       });
 
       // Save initial brief
@@ -294,7 +339,7 @@ export function IntakeWizard() {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
-      let generatedResult: any = null;
+      let generatedResult: GeneratedPromptData | null = null;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -308,18 +353,63 @@ export function IntakeWizard() {
           try {
             const msg = JSON.parse(line);
             if (msg.type === "progress") {
+              setGenerationState((prev) => ({
+                ...prev,
+                step: "running",
+                currentStepNumber: msg.stepNumber || prev.currentStepNumber || 1,
+                totalSteps: msg.totalSteps || 3,
+                currentStepId: msg.stepId,
+                message: msg.message || "",
+                progressPercent: msg.progressPercent || prev.progressPercent || 25,
+                isWaiting: false,
+                waitSecondsRemaining: 0,
+                isQuotaWall: false,
+                activeModel: msg.modelUsed || prev.activeModel,
+                activeKeyMask: msg.keyMask || prev.activeKeyMask,
+              }));
+            } else if (msg.type === "waiting") {
+              setGenerationState((prev) => ({
+                ...prev,
+                step: "running",
+                currentStepNumber: msg.stepNumber || prev.currentStepNumber || 1,
+                totalSteps: msg.totalSteps || 3,
+                currentStepId: msg.stepId,
+                message: msg.message || "",
+                isWaiting: true,
+                waitSecondsRemaining: msg.waitSecondsRemaining || 0,
+                isQuotaWall: false,
+                activeModel: msg.modelUsed || prev.activeModel,
+                activeKeyMask: msg.keyMask || prev.activeKeyMask,
+              }));
+            } else if (msg.type === "step_complete") {
+              setGenerationState((prev) => ({
+                ...prev,
+                currentStepNumber: msg.stepNumber || prev.currentStepNumber,
+                message: msg.message || "",
+                progressPercent: msg.progressPercent || prev.progressPercent,
+                isWaiting: false,
+                waitSecondsRemaining: 0,
+              }));
+            } else if (msg.type === "quota_wall") {
               setGenerationState({
-                step: msg.step === "stageA" ? "stageA_research" : "stageB_synthesis",
-                message: msg.message,
-                progressPercent: msg.progressPercent || 50,
+                step: "error",
+                currentStepNumber: msg.stepNumber || 1,
+                totalSteps: 3,
+                message: msg.message || "",
+                progressPercent: msg.progressPercent || 33,
+                isWaiting: false,
+                isQuotaWall: true,
+                quotaWallResetTime: msg.quotaWallResetPacific,
+                quotaWallRemainingFormatted: msg.quotaWallRemainingFormatted,
               });
+              return;
             } else if (msg.type === "complete") {
-              generatedResult = msg.data;
+              generatedResult = msg.data as GeneratedPromptData;
             } else if (msg.type === "error") {
-              throw new Error(msg.error || "Gemini is under heavy load right now, please try again in a minute.");
+              throw new Error(msg.error || "An error occurred during pipeline execution.");
             }
-          } catch (e: any) {
-            if (e.message && e.message.includes("Gemini is under heavy load")) {
+          } catch (e: unknown) {
+            if (e instanceof Error && e.message.includes("quota")) {
               throw e;
             }
           }
@@ -327,11 +417,13 @@ export function IntakeWizard() {
       }
 
       if (!generatedResult) {
-        throw new Error("Gemini is under heavy load right now, please try again in a minute.");
+        throw new Error("Pipeline interrupted before completing.");
       }
 
       setGenerationState({
         step: "persisting",
+        currentStepNumber: 3,
+        totalSteps: 3,
         message: "Persisting prompt to portfolio history...",
         progressPercent: 95,
       });
@@ -339,30 +431,37 @@ export function IntakeWizard() {
       // Save generated prompt to Firestore & Local storage
       await saveGeneratedPrompt(generatedResult);
       await refreshClientsList();
+      setActiveCheckpoint(null);
 
       setCurrentResult(generatedResult);
       setGenerationState({
         step: "completed",
+        currentStepNumber: 3,
+        totalSteps: 3,
         message: "Complete! Rendering your production Bento Dashboard...",
         progressPercent: 100,
       });
 
       setTimeout(() => {
-        setGenerationState({ step: "idle", message: "", progressPercent: 0 });
+        setGenerationState({
+          step: "idle",
+          currentStepNumber: 0,
+          totalSteps: 3,
+          message: "",
+          progressPercent: 0,
+        });
         setCurrentView("results");
       }, 600);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Generation error:", err);
-      const friendlyMsg =
-        err?.message?.includes("heavy load") || err?.message?.includes("503") || err?.message?.includes("UNAVAILABLE")
-          ? "Gemini is under heavy load right now, please try again in a minute."
-          : err?.message || "Gemini is under heavy load right now, please try again in a minute.";
+      const friendlyMsg = err instanceof Error ? err.message : "Gemini is experiencing temporary load, please try again.";
 
-      setGenerationState({
+      setGenerationState((prev) => ({
+        ...prev,
         step: "error",
         message: friendlyMsg,
         progressPercent: 0,
-      });
+      }));
     }
   };
 
@@ -401,6 +500,30 @@ export function IntakeWizard() {
           </button>
         </div>
       </div>
+
+      {/* Checkpoint Resumption Banner if an in-progress brief was paused */}
+      {activeCheckpoint && activeCheckpoint.status !== "completed" && (
+        <div className="flex items-center justify-between gap-3 p-4 rounded-2xl bg-indigo-50/90 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-500/30 text-xs shadow-sm">
+          <div className="flex items-center gap-2.5 text-indigo-900 dark:text-indigo-200">
+            <RefreshCw className="w-4 h-4 text-indigo-600 dark:text-indigo-400 animate-spin-slow" />
+            <div>
+              <p className="font-semibold">
+                Checkpoint Saved: Step {activeCheckpoint.currentStepIndex} of 3 completed previously
+              </p>
+              <p className="text-[11px] text-indigo-700 dark:text-indigo-300">
+                You can resume generation without re-running earlier completed steps.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => handleGenerate()}
+            className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-all shadow-sm active:scale-95 whitespace-nowrap"
+          >
+            Resume Step {activeCheckpoint.currentStepIndex + 1} ↗
+          </button>
+        </div>
+      )}
 
       {/* Progress & Stepper Header */}
       <div className="bento-card p-5 space-y-3 specular-highlight">
@@ -1160,148 +1283,191 @@ export function IntakeWizard() {
         </div>
       </div>
 
-      {/* Live Pipeline Running / Error Modal */}
+      {/* Live Pipeline Running / Quota Wall / Error Modal */}
       {generationState.step !== "idle" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in duration-200">
           <div className="relative w-full max-w-md rounded-2xl glass-panel specular-highlight p-6 border border-zinc-200 dark:border-white/15 text-center space-y-5 shadow-2xl">
-            {generationState.step === "error" ? (
+            {generationState.isQuotaWall ? (
+              // ================= PACIFIC MIDNIGHT QUOTA WALL VIEW =================
               <div className="space-y-4">
-                <div className="w-12 h-12 mx-auto rounded-2xl bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center border border-amber-200 dark:border-amber-500/30">
-                  <Key className="w-6 h-6" />
+                <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center border border-amber-200 dark:border-amber-500/30">
+                  <Clock className="w-7 h-7" />
+                </div>
+                <div className="space-y-1.5">
+                  <h3 className="text-base font-bold text-zinc-900 dark:text-white">Daily Quota Exhausted Across All Keys</h3>
+                  <p className="text-xs text-zinc-700 dark:text-zinc-300 leading-relaxed bg-zinc-100 dark:bg-zinc-900/70 p-3.5 rounded-xl border border-zinc-200 dark:border-white/10 text-left">
+                    Today&apos;s free tier quota is completely used up across all 3 fallback models and all configured accounts.
+                    <br /><br />
+                    <span className="font-semibold text-indigo-600 dark:text-indigo-400">
+                      Auto-resumes after Pacific midnight:
+                    </span>{" "}
+                    {generationState.quotaWallResetTime || "Tomorrow"} (in {generationState.quotaWallRemainingFormatted || "a few hours"}).
+                  </p>
+                </div>
+
+                <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 text-left text-xs text-emerald-800 dark:text-emerald-300 flex items-center gap-2">
+                  <Check className="w-4 h-4 shrink-0 text-emerald-600" />
+                  <span>
+                    Your progress has been checkpointed in Firestore. When you return, the pipeline will resume exactly from this step.
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    onClick={() => setGenerationState({ step: "idle", currentStepNumber: 0, totalSteps: 3, message: "", progressPercent: 0 })}
+                    className="px-4 py-2 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-xs font-medium dark:text-zinc-300 transition-colors"
+                  >
+                    Close & Keep Checkpoint
+                  </button>
+                  <button
+                    onClick={() => handleGenerate()}
+                    className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white shadow-md transition-all active:scale-95"
+                  >
+                    Check & Retry
+                  </button>
+                </div>
+              </div>
+            ) : generationState.step === "error" ? (
+              // ================= GENERAL ERROR MODAL =================
+              <div className="space-y-4">
+                <div className="w-12 h-12 mx-auto rounded-2xl bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400 flex items-center justify-center border border-red-200 dark:border-red-500/30">
+                  <AlertTriangle className="w-6 h-6" />
                 </div>
                 <div className="space-y-1">
-                  <h3 className="text-base font-bold text-zinc-900 dark:text-white">API Notice & Key Options</h3>
+                  <h3 className="text-base font-bold text-zinc-900 dark:text-white">Pipeline Execution Notice</h3>
                   <p className="text-xs text-zinc-700 dark:text-zinc-300 leading-relaxed bg-zinc-100 dark:bg-zinc-900/70 p-3 rounded-xl border border-zinc-200 dark:border-white/10 text-left">
                     {generationState.message}
                   </p>
                 </div>
 
-                {/* Inline API Key recovery box */}
-                <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-indigo-200 dark:border-indigo-500/20 text-left space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-zinc-900 dark:text-white flex items-center gap-1.5">
-                      <Key className="w-3.5 h-3.5 text-indigo-500" />
-                      Apni Gemini API Key Daalein:
-                    </span>
-                    <a
-                      href="https://aistudio.google.com/apikey"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[10px] text-indigo-600 dark:text-indigo-400 hover:underline font-medium"
-                    >
-                      Free key hasil karein ↗
-                    </a>
-                  </div>
-                  <div className="flex gap-2">
-                    <input
-                      type="password"
-                      placeholder="Paste AIzaSy..."
-                      value={customKeyInput}
-                      onChange={(e) => setCustomKeyInput(e.target.value)}
-                      className="flex-1 px-3 py-2 rounded-lg bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-white/10 text-xs font-mono text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const cleaned = customKeyInput.trim();
-                        updateSettings({ customApiKey: cleaned || undefined });
-                        handleGenerate(cleaned || undefined);
-                      }}
-                      className="px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md transition-all active:scale-95 whitespace-nowrap"
-                    >
-                      Save & Retry
-                    </button>
-                  </div>
-                  <p className="text-[10px] text-zinc-500 dark:text-zinc-400">
-                    Apni key daalne se shared server quota limit bypass ho jayegi.
-                  </p>
-                </div>
-
                 <div className="flex items-center justify-end gap-2 pt-2">
                   <button
-                    onClick={() => setGenerationState({ step: "idle", message: "", progressPercent: 0 })}
+                    onClick={() => setGenerationState({ step: "idle", currentStepNumber: 0, totalSteps: 3, message: "", progressPercent: 0 })}
                     className="px-4 py-2 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-xs font-medium dark:text-zinc-300 transition-colors"
                   >
                     Dismiss
                   </button>
                   <button
                     onClick={() => handleGenerate()}
-                    className="px-4 py-2 rounded-xl bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-xs font-bold text-zinc-800 dark:text-white transition-all"
+                    className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white shadow-md transition-all active:scale-95"
                   >
-                    Retry Current
+                    Retry Pipeline
                   </button>
                 </div>
               </div>
             ) : (
+              // ================= LIVE PIPELINE RUNNING VIEW =================
               <>
                 <div className="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-tr from-indigo-500 to-cyan-400 p-0.5 shadow-lg shadow-indigo-500/30 animate-pulse">
                   <div className="w-full h-full bg-white dark:bg-zinc-950 rounded-[14px] flex items-center justify-center">
-                    <Sparkles className="w-7 h-7 text-indigo-600 dark:text-indigo-400 animate-spin" />
+                    {generationState.isWaiting ? (
+                      <Hourglass className="w-7 h-7 text-amber-500 animate-spin" />
+                    ) : (
+                      <Sparkles className="w-7 h-7 text-indigo-600 dark:text-indigo-400 animate-spin" />
+                    )}
                   </div>
                 </div>
 
                 <div className="space-y-1.5">
-                  <h3 className="text-base font-bold text-zinc-900 dark:text-white">BriefCraft 2026 Pipeline Running</h3>
+                  <div className="flex items-center justify-center gap-2">
+                    <h3 className="text-base font-bold text-zinc-900 dark:text-white">
+                      BriefCraft Resumable Pipeline
+                    </h3>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 font-semibold">
+                      Step {generationState.currentStepNumber || 1} of 3
+                    </span>
+                  </div>
                   <p className="text-xs text-indigo-600 dark:text-indigo-300 font-medium">{generationState.message}</p>
                 </div>
 
-                {/* Step Progress Checklist */}
-                <div className="space-y-2 text-left text-xs bg-zinc-50 dark:bg-zinc-900/70 p-3.5 rounded-xl border border-zinc-200 dark:border-white/5">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`w-2 h-2 rounded-full ${
-                        generationState.progressPercent >= 20 ? "bg-emerald-500" : "bg-zinc-300 dark:bg-zinc-600"
-                      }`}
-                    />
-                    <span
-                      className={
-                        generationState.progressPercent >= 20 ? "text-zinc-900 dark:text-zinc-200 font-medium" : "text-zinc-500"
-                      }
-                    >
-                      Stage A: Grounded Search Research across 10 dimensions
+                {/* Proactive RPM Pacing countdown ticker badge */}
+                {generationState.isWaiting && (generationState.waitSecondsRemaining || 0) > 0 && (
+                  <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 text-amber-800 dark:text-amber-300 text-xs font-semibold flex items-center justify-center gap-2 animate-pulse">
+                    <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                    <span>
+                      Step {generationState.currentStepNumber || 1} of 3 done — waiting {generationState.waitSecondsRemaining}s before continuing
                     </span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`w-2 h-2 rounded-full ${
-                        generationState.progressPercent >= 50 ? "bg-emerald-500" : "bg-zinc-300 dark:bg-zinc-600"
-                      }`}
-                    />
-                    <span
-                      className={
-                        generationState.progressPercent >= 50 ? "text-zinc-900 dark:text-zinc-200 font-medium" : "text-zinc-500"
-                      }
-                    >
-                      Analyzing Awwwards, Land-book & Godly benchmarks
-                    </span>
+                )}
+
+                {/* 3-Step Progress Checklist */}
+                <div className="space-y-2.5 text-left text-xs bg-zinc-50 dark:bg-zinc-900/70 p-3.5 rounded-xl border border-zinc-200 dark:border-white/5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`w-2 h-2 rounded-full ${
+                          (generationState.currentStepNumber || 1) >= 2
+                            ? "bg-emerald-500"
+                            : (generationState.currentStepNumber || 1) === 1
+                            ? "bg-indigo-500 animate-pulse"
+                            : "bg-zinc-300 dark:bg-zinc-600"
+                        }`}
+                      />
+                      <span
+                        className={
+                          (generationState.currentStepNumber || 1) >= 1
+                            ? "text-zinc-900 dark:text-zinc-200 font-medium"
+                            : "text-zinc-500"
+                        }
+                      >
+                        Step 1: Creative & Aesthetic Dimensions (1–5)
+                      </span>
+                    </div>
+                    {(generationState.currentStepNumber || 1) >= 2 && (
+                      <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">Done ✓</span>
+                    )}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`w-2 h-2 rounded-full ${
-                        generationState.progressPercent >= 80 ? "bg-emerald-500" : "bg-zinc-300 dark:bg-zinc-600"
-                      }`}
-                    />
-                    <span
-                      className={
-                        generationState.progressPercent >= 80 ? "text-zinc-900 dark:text-zinc-200 font-medium" : "text-zinc-500"
-                      }
-                    >
-                      Stage B: Structured JSON Build Prompt synthesis
-                    </span>
+
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`w-2 h-2 rounded-full ${
+                          (generationState.currentStepNumber || 1) >= 3
+                            ? "bg-emerald-500"
+                            : (generationState.currentStepNumber || 1) === 2
+                            ? "bg-indigo-500 animate-pulse"
+                            : "bg-zinc-300 dark:bg-zinc-600"
+                        }`}
+                      />
+                      <span
+                        className={
+                          (generationState.currentStepNumber || 1) >= 2
+                            ? "text-zinc-900 dark:text-zinc-200 font-medium"
+                            : "text-zinc-500"
+                        }
+                      >
+                        Step 2: Technical Stack & Industry Benchmarks (6–10)
+                      </span>
+                    </div>
+                    {(generationState.currentStepNumber || 1) >= 3 && (
+                      <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">Done ✓</span>
+                    )}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`w-2 h-2 rounded-full ${
-                        generationState.progressPercent >= 100 ? "bg-emerald-500" : "bg-zinc-300 dark:bg-zinc-600"
-                      }`}
-                    />
-                    <span
-                      className={
-                        generationState.progressPercent >= 100 ? "text-zinc-900 dark:text-zinc-200 font-medium" : "text-zinc-500"
-                      }
-                    >
-                      Persisting brief to client portfolio
-                    </span>
+
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`w-2 h-2 rounded-full ${
+                          generationState.step === "completed"
+                            ? "bg-emerald-500"
+                            : (generationState.currentStepNumber || 1) === 3
+                            ? "bg-indigo-500 animate-pulse"
+                            : "bg-zinc-300 dark:bg-zinc-600"
+                        }`}
+                      />
+                      <span
+                        className={
+                          (generationState.currentStepNumber || 1) >= 3
+                            ? "text-zinc-900 dark:text-zinc-200 font-medium"
+                            : "text-zinc-500"
+                        }
+                      >
+                        Step 3: Master Build Prompt & Schema Synthesis
+                      </span>
+                    </div>
+                    {generationState.step === "completed" && (
+                      <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">Done ✓</span>
+                    )}
                   </div>
                 </div>
 
@@ -1316,7 +1482,7 @@ export function IntakeWizard() {
                 </div>
 
                 <p className="text-[11px] text-zinc-500 dark:text-zinc-400 italic">
-                  Grounding with Google Search can take ~10–15s for comprehensive industry intelligence.
+                  Proactively spaced per Gemini 3 RPM rate limits. All checkpoints persist automatically.
                 </p>
               </>
             )}

@@ -257,7 +257,11 @@ export function Navbar() {
             >
               <Settings className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400" />
               <span className="text-[10px] text-zinc-500 dark:text-zinc-400 hidden xl:inline">
-                {settings.model === "gemini-3.8-flash" ? "3.8 Flash" : "3.1 Pro"}
+                {settings.model === "gemini-3.1-flash-lite"
+                  ? "3.1 Lite"
+                  : settings.model === "gemini-3.5-flash-lite"
+                  ? "3.5 Lite"
+                  : "3.7 Flash"}
               </span>
               {settings.customApiKey && (
                 <span

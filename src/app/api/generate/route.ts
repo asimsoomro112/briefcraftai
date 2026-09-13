@@ -1,13 +1,13 @@
 import { NextRequest } from "next/server";
-import { runStageAResearch, runStageBSynthesis } from "@/lib/gemini";
-import { GeneratedPromptData } from "@/types";
+import { executeResumablePipeline, PipelineStreamEvent } from "@/lib/pipeline-coordinator";
+import { GeminiModelId } from "@/types";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60; // Max execution time for Vercel Serverless Functions
+export const maxDuration = 120; // Allow sufficient duration for pacing intervals
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { brief, model = "gemini-3.8-flash" } = body;
+  const { brief, model = "gemini-3.1-flash-lite" } = body;
 
   if (!brief || !brief.clientName || !brief.industry) {
     return new Response(
@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
   const stream = new TransformStream();
   const writer = stream.writable.getWriter();
 
-  const send = async (data: any) => {
+  const send = async (data: PipelineStreamEvent) => {
     try {
       await writer.write(encoder.encode(JSON.stringify(data) + "\n"));
     } catch {
@@ -31,69 +31,33 @@ export async function POST(req: NextRequest) {
 
   (async () => {
     try {
-      await send({
-        type: "progress",
-        step: "stageA",
-        message: `Stage A: Researching live 2026 web design & tech landscape for ${brief.industry}...`,
-        progressPercent: 20,
-      });
-
-      const options = {
-        model,
+      await executeResumablePipeline(brief, {
         customApiKey: clientApiKey,
-        onProgress: async (update: any) => {
-          await send({
-            type: "progress",
-            step: update.step,
-            message: update.message,
-            isRetrying: update.isRetrying,
-            progressPercent: update.step === "stageA" ? 35 : 75,
-          });
-        },
-      };
-
-      // Stage A: Research
-      const research = await runStageAResearch(brief, options);
-
-      await send({
-        type: "progress",
-        step: "stageB",
-        message: `Stage B: Synthesizing master build prompt with structured output...`,
-        progressPercent: 65,
+        preferredModel: model as GeminiModelId,
+        emit: send,
       });
-
-      // Stage B: Synthesis
-      const synthesis = await runStageBSynthesis(brief, research, options);
-
-      const promptId = `prompt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-      const fullResult: GeneratedPromptData = {
-        id: promptId,
-        clientId: brief.id,
-        ...synthesis,
-        createdAt: new Date().toISOString(),
-      };
-
-      await send({
-        type: "complete",
-        data: fullResult,
-      });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("API /api/generate pipeline error:", error);
-      const rawMsg = error?.message || "";
-      let friendlyMsg = rawMsg;
-      if (rawMsg.includes("quota") || rawMsg.includes("RESOURCE_EXHAUSTED") || rawMsg.includes("429")) {
-        friendlyMsg = "Gemini API key quota limit reached. Please enter your personal Google AI Studio API key to continue generating.";
-      } else if (rawMsg.includes("API_KEY_INVALID") || rawMsg.includes("invalid") || rawMsg.includes("403")) {
-        friendlyMsg = "Invalid Gemini API key. Please check your API key or enter a valid Google AI Studio key.";
-      } else if (rawMsg.includes("heavy load") || rawMsg.includes("503") || rawMsg.includes("UNAVAILABLE")) {
-        friendlyMsg = "Gemini is under heavy load right now, please try again in a minute.";
-      } else if (!friendlyMsg) {
-        friendlyMsg = "Internal server error in generation pipeline.";
+      const isQuotaWall = typeof error === "object" && error !== null && "name" in error && (error as { name: string }).name === "QuotaWallError";
+      if (isQuotaWall) {
+        // Quota wall already emitted by coordinator, ensure safe finish
+      } else {
+        const rawMsg = error instanceof Error ? error.message : String(error);
+        let friendlyMsg = rawMsg;
+        if (rawMsg.includes("quota") || rawMsg.includes("RESOURCE_EXHAUSTED") || rawMsg.includes("429")) {
+          friendlyMsg = "Gemini API key quota limit reached. Please add a second/third key or check back after Pacific midnight.";
+        } else if (rawMsg.includes("API_KEY_INVALID") || rawMsg.includes("invalid") || rawMsg.includes("403")) {
+          friendlyMsg = "Invalid Gemini API key. Please check your credentials in .env.local or enter a valid key in Settings.";
+        } else if (rawMsg.includes("heavy load") || rawMsg.includes("503") || rawMsg.includes("UNAVAILABLE")) {
+          friendlyMsg = "Gemini is experiencing temporary load, retrying...";
+        } else if (!friendlyMsg) {
+          friendlyMsg = "An error occurred during pipeline execution.";
+        }
+        await send({
+          type: "error",
+          error: friendlyMsg,
+        });
       }
-      await send({
-        type: "error",
-        error: friendlyMsg,
-      });
     } finally {
       try {
         await writer.close();

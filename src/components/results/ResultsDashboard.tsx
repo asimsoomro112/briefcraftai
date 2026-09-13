@@ -5,6 +5,7 @@ import confetti from "canvas-confetti";
 import { useApp } from "@/context/AppContext";
 import { copyToClipboard, downloadAsMarkdown } from "@/lib/utils";
 import { saveGeneratedPrompt } from "@/lib/firestore";
+import { GeneratedPromptData } from "@/types";
 import {
   Copy,
   Check,
@@ -142,7 +143,7 @@ export function ResultsDashboard() {
       if (!reader) throw new Error("Could not read response stream.");
       const decoder = new TextDecoder();
       let buffer = "";
-      let newPrompt: any = null;
+      let newPrompt: GeneratedPromptData | null = null;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -156,11 +157,11 @@ export function ResultsDashboard() {
           try {
             const msg = JSON.parse(line);
             if (msg.type === "complete") {
-              newPrompt = msg.data;
+              newPrompt = msg.data as GeneratedPromptData;
             } else if (msg.type === "error") {
               throw new Error(msg.error || "Gemini is under heavy load right now, please try again in a minute.");
             }
-          } catch (e: any) {
+          } catch (e: unknown) {
             throw e;
           }
         }
@@ -184,10 +185,10 @@ export function ResultsDashboard() {
           origin: { y: 0.7 },
         });
       } catch {}
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Regeneration error:", err);
       const friendly =
-        err?.message || "Gemini is under heavy load right now, please try again in a minute.";
+        err instanceof Error ? err.message : "Gemini is under heavy load right now, please try again in a minute.";
       setRegenError(friendly);
     } finally {
       setIsRegenerating(false);
