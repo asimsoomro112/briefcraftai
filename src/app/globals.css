@@ -1,26 +1,277 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --text-heading: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --card-bg: #ffffff;
+  --card-border: #e2e8f0;
+  --card-hover-border: rgba(99, 102, 241, 0.55);
+  --subcard-bg: #f8fafc;
+  --subcard-border: #e2e8f0;
+  --input-bg: #ffffff;
+  --input-border: #cbd5e1;
+  --input-text: #0f172a;
+  --input-placeholder: #94a3b8;
+  --glass-bg: rgba(255, 255, 255, 0.88);
+  --glass-border: rgba(226, 232, 240, 0.95);
+  --dock-bg: rgba(255, 255, 255, 0.95);
+  --dock-border: rgba(203, 213, 225, 0.9);
+  --code-box-bg: #f8fafc;
+  --code-box-border: #e2e8f0;
+  --accent-primary: #4f46e5;
+  --accent-cyan: #0891b2;
+  --accent-glow: rgba(79, 70, 229, 0.12);
+  --btn-secondary-bg: #f1f5f9;
+  --btn-secondary-text: #0f172a;
+  --btn-secondary-border: #cbd5e1;
+  --radius-bento: 20px;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+html.dark, :root.dark, .dark {
+  --background: #09090b;
+  --foreground: #f4f4f5;
+  --text-heading: #ffffff;
+  --text-secondary: #a1a1aa;
+  --text-muted: #71717a;
+  --card-bg: #111116;
+  --card-border: rgba(255, 255, 255, 0.08);
+  --card-hover-border: rgba(99, 102, 241, 0.45);
+  --subcard-bg: #181820;
+  --subcard-border: rgba(255, 255, 255, 0.07);
+  --input-bg: #181822;
+  --input-border: rgba(255, 255, 255, 0.12);
+  --input-text: #f4f4f5;
+  --input-placeholder: #71717a;
+  --glass-bg: rgba(14, 14, 19, 0.80);
+  --glass-border: rgba(255, 255, 255, 0.12);
+  --dock-bg: rgba(18, 18, 25, 0.82);
+  --dock-border: rgba(255, 255, 255, 0.14);
+  --code-box-bg: #09090d;
+  --code-box-border: rgba(255, 255, 255, 0.10);
+  --accent-primary: #6366f1;
+  --accent-cyan: #06b6d4;
+  --accent-glow: rgba(99, 102, 241, 0.22);
+  --btn-secondary-bg: #27272a;
+  --btn-secondary-text: #f4f4f5;
+  --btn-secondary-border: rgba(255, 255, 255, 0.10);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html.light, :root.light, .light {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --text-heading: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --card-bg: #ffffff;
+  --card-border: #e2e8f0;
+  --card-hover-border: rgba(99, 102, 241, 0.55);
+  --subcard-bg: #f8fafc;
+  --subcard-border: #e2e8f0;
+  --input-bg: #ffffff;
+  --input-border: #cbd5e1;
+  --input-text: #0f172a;
+  --input-placeholder: #94a3b8;
+  --glass-bg: rgba(255, 255, 255, 0.88);
+  --glass-border: rgba(226, 232, 240, 0.95);
+  --dock-bg: rgba(255, 255, 255, 0.95);
+  --dock-border: rgba(203, 213, 225, 0.9);
+  --code-box-bg: #f8fafc;
+  --code-box-border: #e2e8f0;
+  --accent-primary: #4f46e5;
+  --accent-cyan: #0891b2;
+  --accent-glow: rgba(79, 70, 229, 0.12);
+  --btn-secondary-bg: #f1f5f9;
+  --btn-secondary-text: #0f172a;
+  --btn-secondary-border: #cbd5e1;
 }
 
 body {
-  background: var(--background);
+  background-color: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  overflow-x: hidden;
+  transition: background-color 0.2s ease, color 0.2s ease;
+  min-height: 100dvh;
+}
+
+/* Glassmorphism 2.0 (Navbars & Modals) */
+.glass-panel {
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border);
+  color: var(--foreground);
+}
+
+.specular-highlight {
+  position: relative;
+}
+
+.specular-highlight::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.35) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  pointer-events: none;
+}
+
+.light .specular-highlight::before {
+  background: linear-gradient(
+    90deg,
+    rgba(0, 0, 0, 0) 0%,
+    rgba(0, 0, 0, 0.08) 50%,
+    rgba(0, 0, 0, 0) 100%
+  );
+}
+
+/* iOS 26 Liquid Glass Mobile Dock */
+.liquid-glass-dock {
+  background: var(--dock-bg);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--dock-border);
+  box-shadow: 0 12px 36px -4px rgba(0, 0, 0, 0.15), 0 0 20px -2px var(--accent-glow);
+  contain: layout paint;
+}
+
+.dark .liquid-glass-dock {
+  box-shadow: 0 12px 36px -4px rgba(0, 0, 0, 0.35), 0 0 20px -2px var(--accent-glow);
+}
+
+@supports (backdrop-filter: url(#refraction-filter)) {
+  .liquid-glass-dock-chroma {
+    backdrop-filter: url(#refraction-filter) blur(24px);
+  }
+}
+
+/* Bento Card Design */
+.bento-card {
+  background-color: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-bento);
+  color: var(--foreground);
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.04);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.dark .bento-card {
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.35);
+}
+
+.bento-card:hover {
+  border-color: var(--card-hover-border);
+  box-shadow: 0 16px 36px -8px var(--accent-glow);
+}
+
+/* Sub-card container */
+.sub-box {
+  background-color: var(--subcard-bg);
+  border: 1px solid var(--subcard-border);
+  color: var(--foreground);
+}
+
+/* Themed input fields */
+.theme-input {
+  background-color: var(--input-bg);
+  border: 1px solid var(--input-border);
+  color: var(--input-text);
+}
+
+.theme-input::placeholder {
+  color: var(--input-placeholder);
+}
+
+.theme-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+/* Code viewport card */
+.code-viewport {
+  background-color: var(--code-box-bg);
+  border: 1px solid var(--code-box-border);
+  color: var(--foreground);
+}
+
+/* Headings and muted texts */
+.heading-text {
+  color: var(--text-heading);
+}
+
+.secondary-text {
+  color: var(--text-secondary);
+}
+
+.muted-text {
+  color: var(--text-muted);
+}
+
+/* Secondary Button */
+.btn-secondary {
+  background-color: var(--btn-secondary-bg);
+  color: var(--btn-secondary-text);
+  border: 1px solid var(--btn-secondary-border);
+}
+
+.btn-secondary:hover {
+  opacity: 0.9;
+}
+
+/* Soft colored glow */
+.glow-accent {
+  box-shadow: 0 0 30px -5px var(--accent-glow);
+}
+
+/* Custom minimal scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(150, 150, 150, 0.25);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(150, 150, 150, 0.45);
+}
+
+/* Strict Reduced Motion Accessibility */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .liquid-glass-dock-chroma {
+    backdrop-filter: blur(16px) !important;
+  }
+
+  .specular-highlight::before {
+    display: none !important;
+  }
 }

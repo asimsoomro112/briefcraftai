@@ -1,0 +1,1227 @@
+"use client";
+
+import React, { useState } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import { useApp } from "@/context/AppContext";
+import { SiteGoal } from "@/types";
+import { saveClientBrief, saveGeneratedPrompt } from "@/lib/firestore";
+import {
+  Sparkles,
+  ArrowRight,
+  ArrowLeft,
+  Check,
+  Plus,
+  Trash2,
+  Globe,
+  Palette,
+  Layout,
+  Sliders,
+  Target,
+  FileCode,
+  Layers,
+  Clock,
+  ExternalLink,
+  Flame,
+} from "lucide-react";
+
+const STANDARD_TONES = [
+  "Luxury",
+  "Minimal",
+  "Playful",
+  "Corporate",
+  "Bold",
+  "Editorial",
+];
+
+const STANDARD_PAGES = [
+  "Home",
+  "About",
+  "Services",
+  "Products/Shop",
+  "Portfolio",
+  "Blog",
+  "Contact",
+  "Pricing",
+  "Booking",
+];
+
+const STANDARD_FEATURES = [
+  "contact form",
+  "e-commerce",
+  "booking/calendar",
+  "blog/CMS",
+  "multi-language",
+  "animations",
+  "dashboard/login",
+  "newsletter signup",
+];
+
+const GOALS: { id: SiteGoal; label: string; desc: string }[] = [
+  { id: "leads", label: "Lead Generation", desc: "High conversion consultation/quote forms & phone inquiries" },
+  { id: "sales", label: "Direct Sales / E-commerce", desc: "Showcase products, seamless checkout, and merchandising" },
+  { id: "portfolio", label: "Portfolio / Showpiece", desc: "Visual storytelling, case studies, and brand credibility" },
+  { id: "booking", label: "Appointments & Booking", desc: "Calendar integration, scheduling, and reservation flow" },
+  { id: "informational", label: "Informational & Authority", desc: "Deep documentation, thought leadership, and knowledge sharing" },
+];
+
+export function IntakeWizard() {
+  const {
+    activeBrief,
+    updateActiveBrief,
+    setCurrentResult,
+    generationState,
+    setGenerationState,
+    refreshClientsList,
+    setCurrentView,
+    settings,
+  } = useApp();
+
+  const [step, setStep] = useState(1);
+  const [customToneInput, setCustomToneInput] = useState("");
+  const [customPageInput, setCustomPageInput] = useState("");
+  const [customFeatureInput, setCustomFeatureInput] = useState("");
+
+  const totalSteps = 7;
+
+  // Presets for quick 1-click test
+  const loadPreset = (presetType: "jewelry" | "saas" | "architect") => {
+    if (presetType === "jewelry") {
+      updateActiveBrief({
+        clientName: "Aura Haute Joaillerie",
+        industry: "Luxury Fine Jewelry & Bespoke Atelier",
+        description:
+          "An artisan high-jewelry house in Paris crafting bespoke, conflict-free diamond and sapphire heirlooms for discerning collectors.",
+        targetAudience: "Affluent private clients, luxury gift-givers, and collectors aged 30-65 seeking one-of-a-kind bespoke pieces.",
+        primaryGoal: "leads",
+        tones: ["Luxury", "Editorial", "Minimal"],
+        pages: ["Home", "About", "Services", "Portfolio", "Contact", "Bespoke Concierge"],
+        features: ["contact form", "animations", "newsletter signup", "VIP concierge booking"],
+        brand: {
+          hasExistingBrand: true,
+          suggestBrand: false,
+          primaryColor: "#0f172a",
+          secondaryColor: "#d4af37",
+          accentColor: "#f8fafc",
+          brandNotes: "Warm champagne gold accents against deep midnight obsidian with serif elegance.",
+        },
+        competitorUrls: ["https://cartier.com", "https://boucheron.com"],
+        timelineNotes: "Launch in 4 weeks for Paris Couture Week.",
+      });
+    } else if (presetType === "saas") {
+      updateActiveBrief({
+        clientName: "Synthex Engine",
+        industry: "Enterprise AI Infrastructure & Autonomous Pipelines",
+        description:
+          "High-throughput developer platform providing real-time data orchestration and autonomous agent execution for Fortune 500 engineering teams.",
+        targetAudience: "CTOs, VP of Engineering, and Principal Systems Architects building distributed AI workflows.",
+        primaryGoal: "sales",
+        tones: ["Corporate", "Bold", "Minimal"],
+        pages: ["Home", "Products/Shop", "Pricing", "Blog", "Contact"],
+        features: ["dashboard/login", "animations", "newsletter signup", "contact form", "multi-language"],
+        brand: {
+          hasExistingBrand: false,
+          suggestBrand: true,
+          primaryColor: "#6366f1",
+          secondaryColor: "#06b6d4",
+          accentColor: "#ec4899",
+          brandNotes: "High-contrast cybernetic violet and teal highlights over graphite.",
+        },
+        competitorUrls: ["https://vercel.com", "https://linear.app"],
+        timelineNotes: "Need prompt to generate MVP for upcoming Series A pitch.",
+      });
+    } else {
+      updateActiveBrief({
+        clientName: "Vanguard Space Design",
+        industry: "Sustainable Architecture & Spatial Planning",
+        description:
+          "A biophilic architecture and interior design studio crafting carbon-neutral modern residences and creative cultural campuses.",
+        targetAudience: "Forward-thinking homeowners, eco-conscious property developers, and civic cultural institutions.",
+        primaryGoal: "portfolio",
+        tones: ["Minimal", "Editorial"],
+        pages: ["Home", "About", "Portfolio", "Services", "Contact"],
+        features: ["animations", "contact form", "newsletter signup"],
+        brand: {
+          hasExistingBrand: true,
+          suggestBrand: false,
+          primaryColor: "#292524",
+          secondaryColor: "#84cc16",
+          accentColor: "#fafaf9",
+          brandNotes: "Earthy warm stone with vibrant botanical lime accents.",
+        },
+        competitorUrls: ["https://snohetta.com", "https://fosterandpartners.com"],
+        timelineNotes: "Target launch in 6 weeks.",
+      });
+    }
+  };
+
+  const handleNext = () => {
+    if (step < totalSteps) {
+      setStep((s) => s + 1);
+    }
+  };
+
+  const handleBack = () => {
+    if (step > 1) {
+      setStep((s) => s - 1);
+    }
+  };
+
+  // Tones toggle
+  const toggleTone = (tone: string) => {
+    const current = activeBrief.tones || [];
+    if (current.includes(tone)) {
+      updateActiveBrief({ tones: current.filter((t) => t !== tone) });
+    } else {
+      updateActiveBrief({ tones: [...current, tone] });
+    }
+  };
+
+  const addCustomTone = () => {
+    if (customToneInput.trim() && !activeBrief.tones.includes(customToneInput.trim())) {
+      updateActiveBrief({ tones: [...activeBrief.tones, customToneInput.trim()] });
+      setCustomToneInput("");
+    }
+  };
+
+  // Pages toggle
+  const togglePage = (p: string) => {
+    const current = activeBrief.pages || [];
+    if (current.includes(p)) {
+      updateActiveBrief({ pages: current.filter((item) => item !== p) });
+    } else {
+      updateActiveBrief({ pages: [...current, p] });
+    }
+  };
+
+  const addCustomPage = () => {
+    if (customPageInput.trim() && !activeBrief.pages.includes(customPageInput.trim())) {
+      updateActiveBrief({ pages: [...activeBrief.pages, customPageInput.trim()] });
+      setCustomPageInput("");
+    }
+  };
+
+  // Features toggle
+  const toggleFeature = (feat: string) => {
+    const current = activeBrief.features || [];
+    if (current.includes(feat)) {
+      updateActiveBrief({ features: current.filter((f) => f !== feat) });
+    } else {
+      updateActiveBrief({ features: [...current, feat] });
+    }
+  };
+
+  const addCustomFeature = () => {
+    if (customFeatureInput.trim() && !activeBrief.features.includes(customFeatureInput.trim())) {
+      updateActiveBrief({ features: [...activeBrief.features, customFeatureInput.trim()] });
+      setCustomFeatureInput("");
+    }
+  };
+
+  // Competitor URLs
+  const updateCompetitorUrl = (index: number, val: string) => {
+    const urls = [...(activeBrief.competitorUrls || [])];
+    urls[index] = val;
+    updateActiveBrief({ competitorUrls: urls.filter((u) => u !== undefined) });
+  };
+
+  const addCompetitorField = () => {
+    if ((activeBrief.competitorUrls?.length || 0) < 3) {
+      updateActiveBrief({ competitorUrls: [...(activeBrief.competitorUrls || []), ""] });
+    }
+  };
+
+  const removeCompetitorField = (index: number) => {
+    const urls = [...(activeBrief.competitorUrls || [])];
+    urls.splice(index, 1);
+    updateActiveBrief({ competitorUrls: urls });
+  };
+
+  // Final Generation Trigger
+  const handleGenerate = async () => {
+    if (!activeBrief.clientName || !activeBrief.industry) {
+      alert("Please ensure Client Name and Industry are filled out.");
+      setStep(1);
+      return;
+    }
+
+    try {
+      setGenerationState({
+        step: "stageA_research",
+        message: "Stage A: Researching live 2026 web design & tech landscape for " + activeBrief.industry + "...",
+        progressPercent: 20,
+      });
+
+      // Save initial brief
+      await saveClientBrief(activeBrief);
+      await refreshClientsList();
+
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (settings.customApiKey) {
+        headers["x-gemini-api-key"] = settings.customApiKey;
+      }
+
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          brief: activeBrief,
+          model: settings.model,
+        }),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        let errMsg = "Gemini is under heavy load right now, please try again in a minute.";
+        try {
+          const parsed = JSON.parse(errText);
+          errMsg = parsed.error || errMsg;
+        } catch {}
+        throw new Error(errMsg);
+      }
+
+      if (!response.body) {
+        throw new Error("Empty response body from generation pipeline.");
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let generatedResult: any = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const msg = JSON.parse(line);
+            if (msg.type === "progress") {
+              setGenerationState({
+                step: msg.step === "stageA" ? "stageA_research" : "stageB_synthesis",
+                message: msg.message,
+                progressPercent: msg.progressPercent || 50,
+              });
+            } else if (msg.type === "complete") {
+              generatedResult = msg.data;
+            } else if (msg.type === "error") {
+              throw new Error(msg.error || "Gemini is under heavy load right now, please try again in a minute.");
+            }
+          } catch (e: any) {
+            if (e.message && e.message.includes("Gemini is under heavy load")) {
+              throw e;
+            }
+          }
+        }
+      }
+
+      if (!generatedResult) {
+        throw new Error("Gemini is under heavy load right now, please try again in a minute.");
+      }
+
+      setGenerationState({
+        step: "persisting",
+        message: "Persisting prompt to portfolio history...",
+        progressPercent: 95,
+      });
+
+      // Save generated prompt to Firestore & Local storage
+      await saveGeneratedPrompt(generatedResult);
+      await refreshClientsList();
+
+      setCurrentResult(generatedResult);
+      setGenerationState({
+        step: "completed",
+        message: "Complete! Rendering your production Bento Dashboard...",
+        progressPercent: 100,
+      });
+
+      setTimeout(() => {
+        setGenerationState({ step: "idle", message: "", progressPercent: 0 });
+        setCurrentView("results");
+      }, 600);
+    } catch (err: any) {
+      console.error("Generation error:", err);
+      const friendlyMsg =
+        err?.message?.includes("heavy load") || err?.message?.includes("503") || err?.message?.includes("UNAVAILABLE")
+          ? "Gemini is under heavy load right now, please try again in a minute."
+          : err?.message || "Gemini is under heavy load right now, please try again in a minute.";
+
+      setGenerationState({
+        step: "error",
+        message: friendlyMsg,
+        progressPercent: 0,
+      });
+    }
+  };
+
+  const isStepValid = () => {
+    if (step === 1) return activeBrief.clientName.trim() !== "" && activeBrief.industry.trim() !== "";
+    if (step === 4) return activeBrief.pages.length > 0;
+    return true;
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
+      {/* Quick Presets Bar for Instant Dogfooding */}
+      <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-2xl bg-white dark:bg-zinc-900/60 border border-zinc-200 dark:border-white/5 shadow-sm text-xs">
+        <div className="flex items-center gap-2 text-zinc-700 dark:text-zinc-400 font-medium">
+          <Flame className="w-4 h-4 text-amber-500" />
+          <span>Quick 1-Click Test Presets:</span>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => loadPreset("jewelry")}
+            className="min-h-[44px] px-3.5 py-2 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-700 hover:text-zinc-900 border border-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-300 dark:hover:text-white dark:border-white/5 transition-all text-xs font-medium active:scale-95 touch-manipulation flex items-center gap-1"
+          >
+            💎 Luxury Atelier
+          </button>
+          <button
+            onClick={() => loadPreset("saas")}
+            className="min-h-[44px] px-3.5 py-2 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-700 hover:text-zinc-900 border border-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-300 dark:hover:text-white dark:border-white/5 transition-all text-xs font-medium active:scale-95 touch-manipulation flex items-center gap-1"
+          >
+            ⚡ Enterprise AI SaaS
+          </button>
+          <button
+            onClick={() => loadPreset("architect")}
+            className="min-h-[44px] px-3.5 py-2 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-700 hover:text-zinc-900 border border-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-300 dark:hover:text-white dark:border-white/5 transition-all text-xs font-medium active:scale-95 touch-manipulation flex items-center gap-1"
+          >
+            🏛️ Biophilic Architecture
+          </button>
+        </div>
+      </div>
+
+      {/* Progress & Stepper Header */}
+      <div className="bento-card p-5 space-y-3 specular-highlight">
+        <div className="flex items-center justify-between text-xs text-zinc-600 dark:text-zinc-400">
+          <span className="font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5" />
+            Step {step} of {totalSteps}: {getStepTitle(step)}
+          </span>
+          <span className="font-mono text-zinc-700 dark:text-zinc-300">{Math.round((step / totalSteps) * 100)}% Complete</span>
+        </div>
+
+        {/* Progress bar */}
+        <div className="w-full h-1.5 rounded-full bg-zinc-200 dark:bg-zinc-800/80 overflow-hidden">
+          <motion.div
+            className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-cyan-400 rounded-full"
+            initial={{ width: "0%" }}
+            animate={{ width: `${(step / totalSteps) * 100}%` }}
+            transition={{ duration: 0.25 }}
+          />
+        </div>
+
+        {/* Step dots */}
+        <div className="grid grid-cols-7 gap-1 pt-1">
+          {Array.from({ length: totalSteps }).map((_, i) => {
+            const stepNum = i + 1;
+            const isDone = stepNum < step;
+            const isCurrent = stepNum === step;
+            return (
+              <button
+                key={stepNum}
+                onClick={() => setStep(stepNum)}
+                className={`h-1.5 rounded-full transition-all ${
+                  isCurrent
+                    ? "bg-indigo-600 shadow-sm shadow-indigo-500/50"
+                    : isDone
+                    ? "bg-indigo-300 dark:bg-indigo-900/60"
+                    : "bg-zinc-200 dark:bg-zinc-800/40"
+                }`}
+                title={`Jump to step ${stepNum}: ${getStepTitle(stepNum)}`}
+              />
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Wizard Step Content Card */}
+      <div className="bento-card p-6 sm:p-8 relative min-h-[420px] flex flex-col justify-between specular-highlight">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={step}
+            initial={{ opacity: 0, x: 12 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -12 }}
+            transition={{ duration: 0.18 }}
+            className="space-y-6"
+          >
+            {/* Step 1: Overview */}
+            {step === 1 && (
+              <div className="space-y-4">
+                <div className="border-b border-zinc-200 dark:border-white/10 pb-3">
+                  <h2 className="text-xl font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                    <Globe className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                    Client & Industry Overview
+                  </h2>
+                  <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">
+                    Enter the core business profile to seed the 2026 live web research engine.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                      Client / Business Name <span className="text-indigo-600 dark:text-indigo-400">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Lumina Atelier"
+                      value={activeBrief.clientName}
+                      onChange={(e) => updateActiveBrief({ clientName: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/80 border border-zinc-300 dark:border-white/10 text-sm text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-900 transition-colors"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                      Industry / Sector <span className="text-indigo-600 dark:text-indigo-400">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Bespoke Jewelry / Web3 / Specialty Coffee"
+                      value={activeBrief.industry}
+                      onChange={(e) => updateActiveBrief({ industry: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/80 border border-zinc-300 dark:border-white/10 text-sm text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-900 transition-colors"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                    One-Paragraph Description of What They Do
+                  </label>
+                  <textarea
+                    rows={4}
+                    placeholder="Describe their value proposition, uniqueness, and offerings in a clear paragraph..."
+                    value={activeBrief.description}
+                    onChange={(e) => updateActiveBrief({ description: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/80 border border-zinc-300 dark:border-white/10 text-sm text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-900 transition-colors resize-none leading-relaxed"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Step 2: Target Audience & Primary Goal */}
+            {step === 2 && (
+              <div className="space-y-5">
+                <div className="border-b border-zinc-200 dark:border-white/10 pb-3">
+                  <h2 className="text-xl font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                    <Target className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                    Target Audience & Primary Goal
+                  </h2>
+                  <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">
+                    Define who the site is speaking to and what main conversion metric matters most.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Target Audience</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. High-net-worth collectors, tech-forward founders, millennial homeowners..."
+                    value={activeBrief.targetAudience}
+                    onChange={(e) => updateActiveBrief({ targetAudience: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/80 border border-zinc-300 dark:border-white/10 text-sm text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-900 transition-colors"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                    Primary Goal of the Website
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {GOALS.map((g) => {
+                      const selected = activeBrief.primaryGoal === g.id;
+                      return (
+                        <div
+                          key={g.id}
+                          onClick={() => updateActiveBrief({ primaryGoal: g.id })}
+                          className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
+                            selected
+                              ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-500/15 shadow-sm shadow-indigo-500/20"
+                              : "border-zinc-200 bg-zinc-50/80 hover:border-zinc-300 hover:bg-zinc-100 dark:border-white/5 dark:bg-zinc-900/50 dark:hover:border-white/15 dark:hover:bg-zinc-900"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-semibold text-zinc-900 dark:text-white">{g.label}</span>
+                            {selected && <Check className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />}
+                          </div>
+                          <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1 leading-relaxed">{g.desc}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Step 3: Tone & Personality */}
+            {step === 3 && (
+              <div className="space-y-5">
+                <div className="border-b border-zinc-200 dark:border-white/10 pb-3">
+                  <h2 className="text-xl font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                    <Sliders className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                    Tone & Personality Chips
+                  </h2>
+                  <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">
+                    Select the aesthetic temperament. Stage A will use these to research tailored typography, scroll behavior, and hero kinetic styles.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap gap-2.5">
+                  {STANDARD_TONES.map((tone) => {
+                    const isSelected = activeBrief.tones.includes(tone);
+                    return (
+                      <button
+                        key={tone}
+                        type="button"
+                        onClick={() => toggleTone(tone)}
+                        className={`min-h-[44px] px-4 py-2.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 active:scale-95 touch-manipulation ${
+                          isSelected
+                            ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/30 border border-indigo-500"
+                            : "bg-zinc-100 hover:bg-zinc-200 border border-zinc-200 text-zinc-700 hover:text-zinc-900 dark:bg-zinc-900 dark:border-white/10 dark:text-zinc-400 dark:hover:text-white dark:hover:border-white/20"
+                        }`}
+                      >
+                        {isSelected && <Check className="w-3.5 h-3.5" />}
+                        {tone}
+                      </button>
+                    );
+                  })}
+                  {/* Custom Tones */}
+                  {activeBrief.tones
+                    .filter((t) => !STANDARD_TONES.includes(t))
+                    .map((custom) => (
+                      <span
+                        key={custom}
+                        className="px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-purple-100 dark:bg-purple-600/30 border border-purple-200 dark:border-purple-500/40 text-purple-800 dark:text-purple-200 flex items-center gap-1.5"
+                      >
+                        {custom}
+                        <button
+                          onClick={() => toggleTone(custom)}
+                          className="hover:text-red-500 ml-1"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                </div>
+
+                {/* Add Custom Tone */}
+                <div className="flex gap-2 max-w-sm pt-2">
+                  <input
+                    type="text"
+                    placeholder="Add custom tone (e.g. Cyberpunk, Organic)..."
+                    value={customToneInput}
+                    onChange={(e) => setCustomToneInput(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addCustomTone())}
+                    className="flex-1 px-3 py-1.5 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-300 dark:border-white/10 text-xs text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-900 transition-colors"
+                  />
+                  <button
+                    type="button"
+                    onClick={addCustomTone}
+                    className="px-3 py-1.5 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-700 hover:text-zinc-900 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-white border border-zinc-200 dark:border-white/5 text-xs flex items-center gap-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Add
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 4: Pages Needed */}
+            {step === 4 && (
+              <div className="space-y-5">
+                <div className="border-b border-zinc-200 dark:border-white/10 pb-3">
+                  <h2 className="text-xl font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                    <Layout className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                    Pages & Sitemap Checklist
+                  </h2>
+                  <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">
+                    Select required sitemap pages or add custom landing sections.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                  {STANDARD_PAGES.map((page) => {
+                    const isChecked = activeBrief.pages.includes(page);
+                    return (
+                      <div
+                        key={page}
+                        onClick={() => togglePage(page)}
+                        className={`p-3 rounded-xl border cursor-pointer text-xs font-medium flex items-center justify-between transition-all ${
+                          isChecked
+                            ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-500/15 text-indigo-900 dark:text-white shadow-sm shadow-indigo-500/20"
+                            : "border-zinc-200 bg-zinc-50/80 text-zinc-700 hover:border-zinc-300 hover:bg-zinc-100 dark:border-white/5 dark:bg-zinc-900/60 dark:text-zinc-400 dark:hover:border-white/15 dark:hover:text-zinc-200"
+                        }`}
+                      >
+                        <span>{page}</span>
+                        <div
+                          className={`w-4 h-4 rounded flex items-center justify-center border ${
+                            isChecked
+                              ? "bg-indigo-600 border-indigo-400 text-white"
+                              : "border-zinc-300 bg-white dark:border-zinc-700 dark:bg-zinc-800"
+                          }`}
+                        >
+                          {isChecked && <Check className="w-3 h-3" />}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {/* Custom Pages */}
+                  {activeBrief.pages
+                    .filter((p) => !STANDARD_PAGES.includes(p))
+                    .map((custom) => (
+                      <div
+                        key={custom}
+                        className="p-3 rounded-xl border border-purple-200 dark:border-purple-500/40 bg-purple-100 dark:bg-purple-500/10 text-xs font-medium text-purple-900 dark:text-purple-200 flex items-center justify-between"
+                      >
+                        <span className="truncate">{custom}</span>
+                        <button onClick={() => togglePage(custom)} className="text-zinc-400 hover:text-red-500">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                </div>
+
+                {/* Add Custom Page */}
+                <div className="flex gap-2 max-w-sm pt-2">
+                  <input
+                    type="text"
+                    placeholder="Add custom page (e.g. VIP Atelier, Portal)..."
+                    value={customPageInput}
+                    onChange={(e) => setCustomPageInput(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addCustomPage())}
+                    className="flex-1 px-3 py-1.5 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-300 dark:border-white/10 text-xs text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-900 transition-colors"
+                  />
+                  <button
+                    type="button"
+                    onClick={addCustomPage}
+                    className="px-3 py-1.5 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-700 hover:text-zinc-900 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-white border border-zinc-200 dark:border-white/5 text-xs flex items-center gap-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Add
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 5: Must-Have Features */}
+            {step === 5 && (
+              <div className="space-y-5">
+                <div className="border-b border-zinc-200 dark:border-white/10 pb-3">
+                  <h2 className="text-xl font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                    <Layers className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                    Must-Have Interactive Features
+                  </h2>
+                  <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">
+                    Specify functional components needed. The prompt will detail implementation logic and libraries.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                  {STANDARD_FEATURES.map((feat) => {
+                    const isChecked = activeBrief.features.includes(feat);
+                    return (
+                      <div
+                        key={feat}
+                        onClick={() => toggleFeature(feat)}
+                        className={`p-3 rounded-xl border cursor-pointer text-xs font-medium flex items-center justify-between transition-all capitalize ${
+                          isChecked
+                            ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-500/15 text-indigo-900 dark:text-white shadow-sm shadow-indigo-500/20"
+                            : "border-zinc-200 bg-zinc-50/80 text-zinc-700 hover:border-zinc-300 hover:bg-zinc-100 dark:border-white/5 dark:bg-zinc-900/60 dark:text-zinc-400 dark:hover:border-white/15 dark:hover:text-zinc-200"
+                        }`}
+                      >
+                        <span>{feat}</span>
+                        <div
+                          className={`w-4 h-4 rounded flex items-center justify-center border ${
+                            isChecked
+                              ? "bg-indigo-600 border-indigo-400 text-white"
+                              : "border-zinc-300 bg-white dark:border-zinc-700 dark:bg-zinc-800"
+                          }`}
+                        >
+                          {isChecked && <Check className="w-3 h-3" />}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {/* Custom Features */}
+                  {activeBrief.features
+                    .filter((f) => !STANDARD_FEATURES.includes(f))
+                    .map((custom) => (
+                      <div
+                        key={custom}
+                        className="p-3 rounded-xl border border-purple-200 dark:border-purple-500/40 bg-purple-100 dark:bg-purple-500/10 text-xs font-medium text-purple-900 dark:text-purple-200 flex items-center justify-between"
+                      >
+                        <span className="truncate">{custom}</span>
+                        <button onClick={() => toggleFeature(custom)} className="text-zinc-400 hover:text-red-500">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                </div>
+
+                {/* Add Custom Feature */}
+                <div className="flex gap-2 max-w-sm pt-2">
+                  <input
+                    type="text"
+                    placeholder="Add custom feature (e.g. 3D configurator)..."
+                    value={customFeatureInput}
+                    onChange={(e) => setCustomFeatureInput(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addCustomFeature())}
+                    className="flex-1 px-3 py-1.5 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-300 dark:border-white/10 text-xs text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-900 transition-colors"
+                  />
+                  <button
+                    type="button"
+                    onClick={addCustomFeature}
+                    className="px-3 py-1.5 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-700 hover:text-zinc-900 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-white border border-zinc-200 dark:border-white/5 text-xs flex items-center gap-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Add
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 6: Brand Assets & Colors */}
+            {step === 6 && (
+              <div className="space-y-5">
+                <div className="border-b border-zinc-200 dark:border-white/10 pb-3">
+                  <h2 className="text-xl font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                    <Palette className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                    Brand Identity & Palette
+                  </h2>
+                  <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">
+                    Provide existing brand colors or let BriefCraft research a bespoke 2026 harmonious palette.
+                  </p>
+                </div>
+
+                {/* Toggle option */}
+                <div className="flex items-center gap-4">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      updateActiveBrief({
+                        brand: { ...activeBrief.brand, hasExistingBrand: false, suggestBrand: true },
+                      })
+                    }
+                    className={`px-4 py-2.5 rounded-xl text-xs font-semibold border transition-all ${
+                      !activeBrief.brand.hasExistingBrand
+                        ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-500/15 text-indigo-900 dark:text-white shadow-sm shadow-indigo-500/20"
+                        : "border-zinc-200 bg-zinc-50 text-zinc-600 dark:border-white/5 dark:bg-zinc-900/60 dark:text-zinc-400"
+                    }`}
+                  >
+                    ✨ No brand yet — Suggest a 2026 palette
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      updateActiveBrief({
+                        brand: { ...activeBrief.brand, hasExistingBrand: true, suggestBrand: false },
+                      })
+                    }
+                    className={`px-4 py-2.5 rounded-xl text-xs font-semibold border transition-all ${
+                      activeBrief.brand.hasExistingBrand
+                        ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-500/15 text-indigo-900 dark:text-white shadow-sm shadow-indigo-500/20"
+                        : "border-zinc-200 bg-zinc-50 text-zinc-600 dark:border-white/5 dark:bg-zinc-900/60 dark:text-zinc-400"
+                    }`}
+                  >
+                    🎨 I have existing brand colors
+                  </button>
+                </div>
+
+                {activeBrief.brand.hasExistingBrand && (
+                  <div className="space-y-4 pt-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {/* Primary Color */}
+                      <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 space-y-2">
+                        <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Primary Color</label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="color"
+                            value={activeBrief.brand.primaryColor || "#6366f1"}
+                            onChange={(e) =>
+                              updateActiveBrief({
+                                brand: { ...activeBrief.brand, primaryColor: e.target.value },
+                              })
+                            }
+                            className="w-8 h-8 rounded-lg border-0 bg-transparent cursor-pointer"
+                          />
+                          <input
+                            type="text"
+                            value={activeBrief.brand.primaryColor || "#6366f1"}
+                            onChange={(e) =>
+                              updateActiveBrief({
+                                brand: { ...activeBrief.brand, primaryColor: e.target.value },
+                              })
+                            }
+                            className="flex-1 px-2.5 py-1.5 rounded-lg bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-white/10 text-xs text-zinc-900 dark:text-white uppercase font-mono"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Secondary Color */}
+                      <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 space-y-2">
+                        <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Secondary / Ambient</label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="color"
+                            value={activeBrief.brand.secondaryColor || "#06b6d4"}
+                            onChange={(e) =>
+                              updateActiveBrief({
+                                brand: { ...activeBrief.brand, secondaryColor: e.target.value },
+                              })
+                            }
+                            className="w-8 h-8 rounded-lg border-0 bg-transparent cursor-pointer"
+                          />
+                          <input
+                            type="text"
+                            value={activeBrief.brand.secondaryColor || "#06b6d4"}
+                            onChange={(e) =>
+                              updateActiveBrief({
+                                brand: { ...activeBrief.brand, secondaryColor: e.target.value },
+                              })
+                            }
+                            className="flex-1 px-2.5 py-1.5 rounded-lg bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-white/10 text-xs text-zinc-900 dark:text-white uppercase font-mono"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Accent Color */}
+                      <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 space-y-2">
+                        <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Accent Highlight</label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="color"
+                            value={activeBrief.brand.accentColor || "#f43f5e"}
+                            onChange={(e) =>
+                              updateActiveBrief({
+                                brand: { ...activeBrief.brand, accentColor: e.target.value },
+                              })
+                            }
+                            className="w-8 h-8 rounded-lg border-0 bg-transparent cursor-pointer"
+                          />
+                          <input
+                            type="text"
+                            value={activeBrief.brand.accentColor || "#f43f5e"}
+                            onChange={(e) =>
+                              updateActiveBrief({
+                                brand: { ...activeBrief.brand, accentColor: e.target.value },
+                              })
+                            }
+                            className="flex-1 px-2.5 py-1.5 rounded-lg bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-white/10 text-xs text-zinc-900 dark:text-white uppercase font-mono"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                        Brand Identity & Style Notes (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Serif elegance, gold foiling feel, Bauhaus architectural typography..."
+                        value={activeBrief.brand.brandNotes || ""}
+                        onChange={(e) =>
+                          updateActiveBrief({
+                            brand: { ...activeBrief.brand, brandNotes: e.target.value },
+                          })
+                        }
+                        className="w-full px-3.5 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-900/80 border border-zinc-300 dark:border-white/10 text-xs text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-900 transition-colors"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Step 7: Competitors & Timeline Summary */}
+            {step === 7 && (
+              <div className="space-y-5">
+                <div className="border-b border-zinc-200 dark:border-white/10 pb-3">
+                  <h2 className="text-xl font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                    <Clock className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                    Inspiration References & Scope Review
+                  </h2>
+                  <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">
+                    Add competitor or inspiration URLs for live context analysis, and review the brief before launching research.
+                  </p>
+                </div>
+
+                {/* Competitor URLs */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5">
+                      <ExternalLink className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                      Inspiration / Competitor URLs (Up to 3)
+                    </label>
+                    {(activeBrief.competitorUrls?.length || 0) < 3 && (
+                      <button
+                        type="button"
+                        onClick={addCompetitorField}
+                        className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-medium"
+                      >
+                        + Add URL
+                      </button>
+                    )}
+                  </div>
+
+                  {(activeBrief.competitorUrls || []).length === 0 ? (
+                    <button
+                      type="button"
+                      onClick={addCompetitorField}
+                      className="w-full py-2.5 px-3 rounded-xl border border-dashed border-zinc-300 dark:border-white/10 text-xs text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:border-zinc-400 dark:hover:border-white/20 transition-colors"
+                    >
+                      + Add an inspiration or competitor site URL
+                    </button>
+                  ) : (
+                    activeBrief.competitorUrls.map((url, idx) => (
+                      <div key={idx} className="flex gap-2">
+                        <input
+                          type="url"
+                          placeholder="https://example.com"
+                          value={url}
+                          onChange={(e) => updateCompetitorUrl(idx, e.target.value)}
+                          className="flex-1 px-3.5 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-300 dark:border-white/10 text-xs text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-900 transition-colors"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeCompetitorField(idx)}
+                          className="p-2 text-zinc-400 hover:text-red-500 rounded-lg hover:bg-zinc-100 dark:hover:bg-white/5"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* Timeline / Scope Note */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                    Timeline & Scope Notes (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 3-week sprint, launch ahead of Q3 funding, MVP launch..."
+                    value={activeBrief.timelineNotes || ""}
+                    onChange={(e) => updateActiveBrief({ timelineNotes: e.target.value })}
+                    className="w-full px-3.5 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-900/80 border border-zinc-300 dark:border-white/10 text-xs text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-900 transition-colors"
+                  />
+                </div>
+
+                {/* Summary snapshot card */}
+                <div className="p-4 rounded-xl bg-zinc-50 dark:bg-zinc-900/80 border border-zinc-200 dark:border-white/10 space-y-2 text-xs">
+                  <div className="flex items-center justify-between text-indigo-600 dark:text-indigo-400 font-semibold border-b border-zinc-200 dark:border-white/5 pb-2">
+                    <span>Brief Snapshot Ready for Gemini</span>
+                    <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300">
+                      {settings.model}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-zinc-700 dark:text-zinc-300">
+                    <div>
+                      <span className="text-zinc-500">Client:</span> {activeBrief.clientName}
+                    </div>
+                    <div>
+                      <span className="text-zinc-500">Industry:</span> {activeBrief.industry}
+                    </div>
+                    <div>
+                      <span className="text-zinc-500">Goal:</span> {activeBrief.primaryGoal}
+                    </div>
+                    <div>
+                      <span className="text-zinc-500">Pages:</span> {activeBrief.pages.length} selected
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </motion.div>
+        </AnimatePresence>
+
+        {/* Wizard Navigation Footer */}
+        <div className="flex items-center justify-between pt-5 border-t border-zinc-200 dark:border-white/10">
+          <button
+            type="button"
+            onClick={handleBack}
+            disabled={step === 1}
+            className="min-h-[44px] min-w-[90px] flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl border border-zinc-200 dark:border-white/10 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 hover:text-zinc-900 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:text-white text-xs font-medium disabled:opacity-30 disabled:pointer-events-none transition-all active:scale-95 touch-manipulation"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            Previous
+          </button>
+
+          {step < totalSteps ? (
+            <button
+              type="button"
+              onClick={handleNext}
+              disabled={!isStepValid()}
+              className="min-h-[44px] min-w-[110px] flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-xs font-semibold text-white shadow-md shadow-indigo-500/25 transition-all active:scale-95 touch-manipulation"
+            >
+              Continue
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleGenerate}
+              disabled={generationState.step !== "idle"}
+              className="min-h-[48px] flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 via-purple-600 to-cyan-600 hover:opacity-90 text-xs font-bold text-white shadow-lg shadow-indigo-500/30 transition-all active:scale-95 touch-manipulation"
+            >
+              <Sparkles className="w-4 h-4 text-white animate-pulse" />
+              Launch Live Research & Synthesize Prompt
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Live Pipeline Running / Error Modal */}
+      {generationState.step !== "idle" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="relative w-full max-w-md rounded-2xl glass-panel specular-highlight p-6 border border-zinc-200 dark:border-white/15 text-center space-y-5 shadow-2xl">
+            {generationState.step === "error" ? (
+              <div className="space-y-4">
+                <div className="w-12 h-12 mx-auto rounded-2xl bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400 flex items-center justify-center border border-red-200 dark:border-red-500/30">
+                  <Sparkles className="w-6 h-6 rotate-45" />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-base font-bold text-zinc-900 dark:text-white">Pipeline Notice</h3>
+                  <p className="text-xs text-red-700 dark:text-red-300 leading-relaxed bg-red-50 dark:bg-red-950/30 p-3 rounded-xl border border-red-200 dark:border-red-500/20 text-left">
+                    {generationState.message}
+                  </p>
+                </div>
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    onClick={() => setGenerationState({ step: "idle", message: "", progressPercent: 0 })}
+                    className="px-4 py-2 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-xs font-medium dark:text-zinc-300 transition-colors"
+                  >
+                    Dismiss
+                  </button>
+                  <button
+                    onClick={handleGenerate}
+                    className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white shadow-md shadow-indigo-500/25 transition-all"
+                  >
+                    Retry Generation
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-tr from-indigo-500 to-cyan-400 p-0.5 shadow-lg shadow-indigo-500/30 animate-pulse">
+                  <div className="w-full h-full bg-white dark:bg-zinc-950 rounded-[14px] flex items-center justify-center">
+                    <Sparkles className="w-7 h-7 text-indigo-600 dark:text-indigo-400 animate-spin" />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <h3 className="text-base font-bold text-zinc-900 dark:text-white">BriefCraft 2026 Pipeline Running</h3>
+                  <p className="text-xs text-indigo-600 dark:text-indigo-300 font-medium">{generationState.message}</p>
+                </div>
+
+                {/* Step Progress Checklist */}
+                <div className="space-y-2 text-left text-xs bg-zinc-50 dark:bg-zinc-900/70 p-3.5 rounded-xl border border-zinc-200 dark:border-white/5">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        generationState.progressPercent >= 20 ? "bg-emerald-500" : "bg-zinc-300 dark:bg-zinc-600"
+                      }`}
+                    />
+                    <span
+                      className={
+                        generationState.progressPercent >= 20 ? "text-zinc-900 dark:text-zinc-200 font-medium" : "text-zinc-500"
+                      }
+                    >
+                      Stage A: Grounded Search Research across 10 dimensions
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        generationState.progressPercent >= 50 ? "bg-emerald-500" : "bg-zinc-300 dark:bg-zinc-600"
+                      }`}
+                    />
+                    <span
+                      className={
+                        generationState.progressPercent >= 50 ? "text-zinc-900 dark:text-zinc-200 font-medium" : "text-zinc-500"
+                      }
+                    >
+                      Analyzing Awwwards, Land-book & Godly benchmarks
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        generationState.progressPercent >= 80 ? "bg-emerald-500" : "bg-zinc-300 dark:bg-zinc-600"
+                      }`}
+                    />
+                    <span
+                      className={
+                        generationState.progressPercent >= 80 ? "text-zinc-900 dark:text-zinc-200 font-medium" : "text-zinc-500"
+                      }
+                    >
+                      Stage B: Structured JSON Build Prompt synthesis
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        generationState.progressPercent >= 100 ? "bg-emerald-500" : "bg-zinc-300 dark:bg-zinc-600"
+                      }`}
+                    />
+                    <span
+                      className={
+                        generationState.progressPercent >= 100 ? "text-zinc-900 dark:text-zinc-200 font-medium" : "text-zinc-500"
+                      }
+                    >
+                      Persisting brief to client portfolio
+                    </span>
+                  </div>
+                </div>
+
+                {/* Visual bar */}
+                <div className="w-full h-2 rounded-full bg-zinc-200 dark:bg-zinc-800 overflow-hidden">
+                  <motion.div
+                    className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-cyan-400"
+                    initial={{ width: "0%" }}
+                    animate={{ width: `${generationState.progressPercent}%` }}
+                    transition={{ duration: 0.3 }}
+                  />
+                </div>
+
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 italic">
+                  Grounding with Google Search can take ~10–15s for comprehensive industry intelligence.
+                </p>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function getStepTitle(step: number): string {
+  switch (step) {
+    case 1:
+      return "Client Overview";
+    case 2:
+      return "Target Audience & Goals";
+    case 3:
+      return "Tone & Personality";
+    case 4:
+      return "Sitemap & Pages";
+    case 5:
+      return "Interactive Features";
+    case 6:
+      return "Brand Identity & Colors";
+    case 7:
+      return "Inspirations & Launch";
+    default:
+      return "Overview";
+  }
+}
