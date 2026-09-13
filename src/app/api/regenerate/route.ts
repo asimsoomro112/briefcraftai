@@ -71,10 +71,17 @@ export async function POST(req: NextRequest) {
       });
     } catch (error: any) {
       console.error("API /api/regenerate pipeline error:", error);
-      const friendlyMsg =
-        error?.message?.includes("heavy load") || error?.message?.includes("503")
-          ? "Gemini is under heavy load right now, please try again in a minute."
-          : error?.message || "Internal server error in regeneration pipeline.";
+      const rawMsg = error?.message || "";
+      let friendlyMsg = rawMsg;
+      if (rawMsg.includes("quota") || rawMsg.includes("RESOURCE_EXHAUSTED") || rawMsg.includes("429")) {
+        friendlyMsg = "Gemini API key quota limit reached. Please enter your personal Google AI Studio API key to continue generating.";
+      } else if (rawMsg.includes("API_KEY_INVALID") || rawMsg.includes("invalid") || rawMsg.includes("403")) {
+        friendlyMsg = "Invalid Gemini API key. Please check your API key or enter a valid Google AI Studio key.";
+      } else if (rawMsg.includes("heavy load") || rawMsg.includes("503") || rawMsg.includes("UNAVAILABLE")) {
+        friendlyMsg = "Gemini is under heavy load right now, please try again in a minute.";
+      } else if (!friendlyMsg) {
+        friendlyMsg = "Internal server error in regeneration pipeline.";
+      }
       await send({
         type: "error",
         error: friendlyMsg,

@@ -25,6 +25,30 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function isQuotaExceededError(err: any): boolean {
+  if (!err) return false;
+  const msg = (err.message || "") + (err.status || "") + (typeof err === "string" ? err : "");
+  return (
+    msg.includes("429") ||
+    msg.includes("RESOURCE_EXHAUSTED") ||
+    msg.includes("quota") ||
+    msg.includes("Quota exceeded") ||
+    msg.includes("rate limit")
+  );
+}
+
+function isInvalidKeyError(err: any): boolean {
+  if (!err) return false;
+  const msg = (err.message || "") + (err.status || "") + (typeof err === "string" ? err : "");
+  return (
+    msg.includes("API_KEY_INVALID") ||
+    msg.includes("invalid api key") ||
+    msg.includes("API key not valid") ||
+    msg.includes("Forbidden") ||
+    msg.includes("403")
+  );
+}
+
 function isOverloadedError(err: any): boolean {
   if (!err) return false;
   const msg = (err.message || "") + (err.status || "") + (typeof err === "string" ? err : "");
@@ -32,7 +56,6 @@ function isOverloadedError(err: any): boolean {
     msg.includes("503") ||
     msg.includes("high demand") ||
     msg.includes("UNAVAILABLE") ||
-    msg.includes("RESOURCE_EXHAUSTED") ||
     msg.includes("overloaded")
   );
 }
@@ -64,6 +87,11 @@ async function callGeminiWithExponentialBackoff(
       };
     } catch (err: any) {
       lastError = err;
+      if (isQuotaExceededError(err) || isInvalidKeyError(err)) {
+        // Quota or invalid key will not be solved by 503 backoff retries on the same key
+        break;
+      }
+
       if (!isOverloadedError(err) || attempt === backoffDelays.length) {
         // Either not an overload error, or exceeded all 3 retries on primaryModel
         break;
@@ -128,6 +156,18 @@ async function callGeminiWithExponentialBackoff(
   }
 
   // 3. If all attempts and fallbacks failed, throw a friendly user-facing error message (never raw JSON)
+  if (isQuotaExceededError(lastError)) {
+    throw new Error(
+      "Gemini API key quota limit reached (429 Resource Exhausted). Please enter your personal Google AI Studio API key to continue generating."
+    );
+  }
+
+  if (isInvalidKeyError(lastError)) {
+    throw new Error(
+      "Invalid Gemini API key. Please check your API key or enter a valid Google AI Studio key."
+    );
+  }
+
   if (isOverloadedError(lastError)) {
     throw new Error("Gemini is under heavy load right now, please try again in a minute.");
   }

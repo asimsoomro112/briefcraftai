@@ -25,6 +25,7 @@ import {
   CheckCircle2,
   Share2,
   Box,
+  Key,
 } from "lucide-react";
 
 export function ResultsDashboard() {
@@ -35,6 +36,7 @@ export function ResultsDashboard() {
     updateActiveBrief,
     refreshClientsList,
     settings,
+    updateSettings,
     setCurrentView,
   } = useApp();
 
@@ -42,6 +44,9 @@ export function ResultsDashboard() {
   const [researchExpanded, setResearchExpanded] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
+  const [regenError, setRegenError] = useState<string | null>(null);
+  const [customKeyInput, setCustomKeyInput] = useState(settings.customApiKey || "");
+  const [keySavedNotice, setKeySavedNotice] = useState(false);
 
   // Edit brief state for regeneration
   const [editTone, setEditTone] = useState(activeBrief.tones.join(", "));
@@ -92,8 +97,11 @@ export function ResultsDashboard() {
   };
 
   // Run Stage B only with user edits (saves cost & time)
-  const handleRegenerateWithEdits = async () => {
+  const handleRegenerateWithEdits = async (overrideKey?: string) => {
     setIsRegenerating(true);
+    setRegenError(null);
+    const keyToUse = overrideKey !== undefined ? overrideKey : settings.customApiKey;
+
     try {
       const updatedBrief = {
         ...activeBrief,
@@ -106,8 +114,8 @@ export function ResultsDashboard() {
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
       };
-      if (settings.customApiKey) {
-        headers["x-gemini-api-key"] = settings.customApiKey;
+      if (keyToUse) {
+        headers["x-gemini-api-key"] = keyToUse;
       }
 
       const res = await fetch("/api/regenerate", {
@@ -153,9 +161,7 @@ export function ResultsDashboard() {
               throw new Error(msg.error || "Gemini is under heavy load right now, please try again in a minute.");
             }
           } catch (e: any) {
-            if (e.message && e.message.includes("Gemini is under heavy load")) {
-              throw e;
-            }
+            throw e;
           }
         }
       }
@@ -179,11 +185,10 @@ export function ResultsDashboard() {
         });
       } catch {}
     } catch (err: any) {
+      console.error("Regeneration error:", err);
       const friendly =
-        err?.message?.includes("503") || err?.message?.includes("heavy load")
-          ? "Gemini is under heavy load right now, please try again in a minute."
-          : err?.message || "Gemini is under heavy load right now, please try again in a minute.";
-      alert(friendly);
+        err?.message || "Gemini is under heavy load right now, please try again in a minute.";
+      setRegenError(friendly);
     } finally {
       setIsRegenerating(false);
     }
@@ -575,19 +580,74 @@ export function ResultsDashboard() {
                   Stage A live research findings are reused. Only the Stage B synthesis is re-executed, making this iteration fast and cost-free on search queries.
                 </span>
               </div>
+
+              {/* API Key options inside modal */}
+              <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 space-y-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-zinc-900 dark:text-white flex items-center gap-1.5">
+                    <Key className="w-3.5 h-3.5 text-indigo-500" />
+                    Gemini API Key:
+                  </span>
+                  {settings.customApiKey ? (
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-semibold">
+                      Custom Key Active
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+                      Server Default Key
+                    </span>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="password"
+                    placeholder="Enter custom Gemini key (optional)"
+                    value={customKeyInput}
+                    onChange={(e) => setCustomKeyInput(e.target.value)}
+                    className="flex-1 px-3 py-1.5 rounded-lg bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-white/10 text-xs font-mono text-zinc-900 dark:text-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const cleaned = customKeyInput.trim();
+                      updateSettings({ customApiKey: cleaned || undefined });
+                      setKeySavedNotice(true);
+                      setTimeout(() => setKeySavedNotice(false), 2000);
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold whitespace-nowrap active:scale-95 transition-all"
+                  >
+                    {keySavedNotice ? "✓ Saved" : "Save Key"}
+                  </button>
+                </div>
+              </div>
+
+              {/* Error notice if regeneration fails */}
+              {regenError && (
+                <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-500/25 space-y-2 text-left">
+                  <p className="text-xs text-red-700 dark:text-red-300 leading-relaxed">
+                    {regenError}
+                  </p>
+                  <p className="text-[10px] text-zinc-500 dark:text-zinc-400">
+                    Aap apni personal Google AI Studio API key upar enter karke dobara try kar sakte hain.
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-200 dark:border-white/10">
               <button
-                onClick={() => setIsEditModalOpen(false)}
+                onClick={() => {
+                  setIsEditModalOpen(false);
+                  setRegenError(null);
+                }}
                 className="px-4 py-2 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-xs font-medium dark:text-zinc-300 transition-colors"
               >
                 Cancel
               </button>
               <button
-                onClick={handleRegenerateWithEdits}
+                onClick={() => handleRegenerateWithEdits()}
                 disabled={isRegenerating}
-                className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white shadow-md shadow-indigo-500/25 flex items-center gap-1.5"
+                className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white shadow-md shadow-indigo-500/25 flex items-center gap-1.5 active:scale-95 transition-all"
               >
                 {isRegenerating ? (
                   <>

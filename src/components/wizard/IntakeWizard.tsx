@@ -22,6 +22,7 @@ import {
   Clock,
   ExternalLink,
   Flame,
+  Key,
 } from "lucide-react";
 
 const STANDARD_TONES = [
@@ -58,10 +59,10 @@ const STANDARD_FEATURES = [
 
 const GOALS: { id: SiteGoal; label: string; desc: string }[] = [
   { id: "leads", label: "Lead Generation", desc: "High conversion consultation/quote forms & phone inquiries" },
-  { id: "sales", label: "Direct Sales / E-commerce", desc: "Showcase products, seamless checkout, and merchandising" },
-  { id: "portfolio", label: "Portfolio / Showpiece", desc: "Visual storytelling, case studies, and brand credibility" },
-  { id: "booking", label: "Appointments & Booking", desc: "Calendar integration, scheduling, and reservation flow" },
-  { id: "informational", label: "Informational & Authority", desc: "Deep documentation, thought leadership, and knowledge sharing" },
+  { id: "sales", label: "Direct Sales", desc: "Showcase products/inventory, pricing tiers, and checkout CTA" },
+  { id: "portfolio", label: "Work & Credibility", desc: "Curated case studies, client roster, and press features" },
+  { id: "booking", label: "Appointment Booking", desc: "Calendar integration, service menus, and reservation flows" },
+  { id: "informational", label: "Authority & Education", desc: "Thought leadership articles, documentation, and company story" },
 ];
 
 export function IntakeWizard() {
@@ -74,12 +75,15 @@ export function IntakeWizard() {
     refreshClientsList,
     setCurrentView,
     settings,
+    updateSettings,
   } = useApp();
 
   const [step, setStep] = useState(1);
   const [customToneInput, setCustomToneInput] = useState("");
   const [customPageInput, setCustomPageInput] = useState("");
   const [customFeatureInput, setCustomFeatureInput] = useState("");
+  const [customKeyInput, setCustomKeyInput] = useState(settings.customApiKey || "");
+  const [keySavedNotice, setKeySavedNotice] = useState(false);
 
   const totalSteps = 7;
 
@@ -237,12 +241,14 @@ export function IntakeWizard() {
   };
 
   // Final Generation Trigger
-  const handleGenerate = async () => {
+  const handleGenerate = async (overrideKey?: string) => {
     if (!activeBrief.clientName || !activeBrief.industry) {
       alert("Please ensure Client Name and Industry are filled out.");
       setStep(1);
       return;
     }
+
+    const keyToUse = overrideKey !== undefined ? overrideKey : settings.customApiKey;
 
     try {
       setGenerationState({
@@ -258,8 +264,8 @@ export function IntakeWizard() {
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
       };
-      if (settings.customApiKey) {
-        headers["x-gemini-api-key"] = settings.customApiKey;
+      if (keyToUse) {
+        headers["x-gemini-api-key"] = keyToUse;
       }
 
       const response = await fetch("/api/generate", {
@@ -1016,6 +1022,80 @@ export function IntakeWizard() {
                   />
                 </div>
 
+                {/* Gemini API Key Selection & Quota Protection */}
+                <div className="p-4 rounded-xl bg-zinc-50 dark:bg-zinc-900/80 border border-zinc-200 dark:border-white/10 space-y-2.5 text-xs">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Key className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                      <span className="font-bold text-zinc-900 dark:text-white">
+                        Gemini API Key
+                      </span>
+                    </div>
+                    {settings.customApiKey ? (
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-semibold border border-emerald-300 dark:border-emerald-500/30">
+                        Custom Key Active
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 font-semibold">
+                        Default Server Key
+                      </span>
+                    )}
+                  </div>
+
+                  <p className="text-[11px] text-zinc-600 dark:text-zinc-400 leading-relaxed">
+                    Uses default server key. Agar server quota reach ho jaye to aap yahan apni personal Google AI Studio API key daal sakte hain.
+                  </p>
+
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                    <input
+                      type="password"
+                      placeholder="Paste your personal Gemini API key (AIzaSy...)"
+                      value={customKeyInput}
+                      onChange={(e) => setCustomKeyInput(e.target.value)}
+                      className="flex-1 px-3 py-2 rounded-lg bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-white/10 text-xs font-mono text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-none focus:border-indigo-500"
+                    />
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const cleaned = customKeyInput.trim();
+                          updateSettings({ customApiKey: cleaned || undefined });
+                          setKeySavedNotice(true);
+                          setTimeout(() => setKeySavedNotice(false), 2000);
+                        }}
+                        className="px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-sm transition-all active:scale-95 whitespace-nowrap"
+                      >
+                        {keySavedNotice ? "✓ Saved!" : customKeyInput.trim() ? "Use My Key" : "Use Server Key"}
+                      </button>
+                      {settings.customApiKey && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCustomKeyInput("");
+                            updateSettings({ customApiKey: undefined });
+                          }}
+                          className="px-2.5 py-2 rounded-lg bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs hover:bg-zinc-300 dark:hover:bg-zinc-700 transition-colors"
+                          title="Reset to server default key"
+                        >
+                          Reset
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-[10px] text-zinc-500 dark:text-zinc-400 pt-0.5">
+                    <span>Keys are kept in your browser&apos;s local storage.</span>
+                    <a
+                      href="https://aistudio.google.com/apikey"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-indigo-600 dark:text-indigo-400 hover:underline font-medium"
+                    >
+                      Get free key ↗
+                    </a>
+                  </div>
+                </div>
+
                 {/* Summary snapshot card */}
                 <div className="p-4 rounded-xl bg-zinc-50 dark:bg-zinc-900/80 border border-zinc-200 dark:border-white/10 space-y-2 text-xs">
                   <div className="flex items-center justify-between text-indigo-600 dark:text-indigo-400 font-semibold border-b border-zinc-200 dark:border-white/5 pb-2">
@@ -1069,7 +1149,7 @@ export function IntakeWizard() {
           ) : (
             <button
               type="button"
-              onClick={handleGenerate}
+              onClick={() => handleGenerate()}
               disabled={generationState.step !== "idle"}
               className="min-h-[48px] flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 via-purple-600 to-cyan-600 hover:opacity-90 text-xs font-bold text-white shadow-lg shadow-indigo-500/30 transition-all active:scale-95 touch-manipulation"
             >
@@ -1086,15 +1166,57 @@ export function IntakeWizard() {
           <div className="relative w-full max-w-md rounded-2xl glass-panel specular-highlight p-6 border border-zinc-200 dark:border-white/15 text-center space-y-5 shadow-2xl">
             {generationState.step === "error" ? (
               <div className="space-y-4">
-                <div className="w-12 h-12 mx-auto rounded-2xl bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400 flex items-center justify-center border border-red-200 dark:border-red-500/30">
-                  <Sparkles className="w-6 h-6 rotate-45" />
+                <div className="w-12 h-12 mx-auto rounded-2xl bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center border border-amber-200 dark:border-amber-500/30">
+                  <Key className="w-6 h-6" />
                 </div>
                 <div className="space-y-1">
-                  <h3 className="text-base font-bold text-zinc-900 dark:text-white">Pipeline Notice</h3>
-                  <p className="text-xs text-red-700 dark:text-red-300 leading-relaxed bg-red-50 dark:bg-red-950/30 p-3 rounded-xl border border-red-200 dark:border-red-500/20 text-left">
+                  <h3 className="text-base font-bold text-zinc-900 dark:text-white">API Notice & Key Options</h3>
+                  <p className="text-xs text-zinc-700 dark:text-zinc-300 leading-relaxed bg-zinc-100 dark:bg-zinc-900/70 p-3 rounded-xl border border-zinc-200 dark:border-white/10 text-left">
                     {generationState.message}
                   </p>
                 </div>
+
+                {/* Inline API Key recovery box */}
+                <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-indigo-200 dark:border-indigo-500/20 text-left space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-zinc-900 dark:text-white flex items-center gap-1.5">
+                      <Key className="w-3.5 h-3.5 text-indigo-500" />
+                      Apni Gemini API Key Daalein:
+                    </span>
+                    <a
+                      href="https://aistudio.google.com/apikey"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10px] text-indigo-600 dark:text-indigo-400 hover:underline font-medium"
+                    >
+                      Free key hasil karein ↗
+                    </a>
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="password"
+                      placeholder="Paste AIzaSy..."
+                      value={customKeyInput}
+                      onChange={(e) => setCustomKeyInput(e.target.value)}
+                      className="flex-1 px-3 py-2 rounded-lg bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-white/10 text-xs font-mono text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const cleaned = customKeyInput.trim();
+                        updateSettings({ customApiKey: cleaned || undefined });
+                        handleGenerate(cleaned || undefined);
+                      }}
+                      className="px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md transition-all active:scale-95 whitespace-nowrap"
+                    >
+                      Save & Retry
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-zinc-500 dark:text-zinc-400">
+                    Apni key daalne se shared server quota limit bypass ho jayegi.
+                  </p>
+                </div>
+
                 <div className="flex items-center justify-end gap-2 pt-2">
                   <button
                     onClick={() => setGenerationState({ step: "idle", message: "", progressPercent: 0 })}
@@ -1103,10 +1225,10 @@ export function IntakeWizard() {
                     Dismiss
                   </button>
                   <button
-                    onClick={handleGenerate}
-                    className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white shadow-md shadow-indigo-500/25 transition-all"
+                    onClick={() => handleGenerate()}
+                    className="px-4 py-2 rounded-xl bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-xs font-bold text-zinc-800 dark:text-white transition-all"
                   >
-                    Retry Generation
+                    Retry Current
                   </button>
                 </div>
               </div>

@@ -209,16 +209,26 @@ export function Navbar() {
               )}
             </button>
 
-            {/* Settings Trigger with active model badge */}
+            {/* Settings Trigger with active model badge & custom key indicator */}
             <button
               onClick={() => setIsSettingsOpen(true)}
-              className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800/60 dark:hover:bg-zinc-700/60 border border-zinc-200 dark:border-white/10 text-zinc-700 dark:text-zinc-200 transition-all"
-              title="Model & API Key Settings"
+              className="relative flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800/60 dark:hover:bg-zinc-700/60 border border-zinc-200 dark:border-white/10 text-zinc-700 dark:text-zinc-200 transition-all"
+              title={
+                settings.customApiKey
+                  ? `Settings (Custom Gemini API Key active) • ${settings.model}`
+                  : `Model & API Key Settings • ${settings.model}`
+              }
             >
               <Settings className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400" />
               <span className="text-[10px] text-zinc-500 dark:text-zinc-400 hidden xl:inline">
                 {settings.model === "gemini-3.8-flash" ? "3.8 Flash" : "3.1 Pro"}
               </span>
+              {settings.customApiKey && (
+                <span
+                  className="w-2 h-2 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50"
+                  title="Personal Gemini API Key Active"
+                />
+              )}
             </button>
 
             {/* Theme Toggle */}
