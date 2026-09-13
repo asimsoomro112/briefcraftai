@@ -41,7 +41,6 @@ export function Navbar() {
 
   // Height, background, and border transforms for desktop floating navbar
   const navHeight = useTransform(scrollY, [0, 80], [72, 50]);
-  const mobileNavHeight = useTransform(scrollY, [0, 80], [56, 44]);
   const navBg = useTransform(
     scrollY,
     [0, 80],
@@ -59,49 +58,86 @@ export function Navbar() {
 
   return (
     <>
-      {/* Mobile Fixed Slim Glass Top Bar (md:hidden) */}
-      <motion.header
+      {/* Mobile Floating iOS 26 Liquid Glass Top Bar (md:hidden) — Locked permanently at top */}
+      <div
+        className="fixed inset-x-0 z-40 flex justify-center px-3 sm:px-4 md:hidden pointer-events-none"
         style={{
-          height: mobileNavHeight,
-          backgroundColor: navBg,
-          borderColor: navBorder,
+          top: "max(0.75rem, calc(env(safe-area-inset-top, 0px) + 0.5rem))",
         }}
-        className="fixed top-0 inset-x-0 z-40 md:hidden glass-panel specular-highlight border-b px-4 flex items-center justify-between shadow-sm transition-colors"
       >
-        <button
-          onClick={resetActiveBrief}
-          className="flex items-center gap-2 text-left focus:outline-none min-h-[44px] py-1 active:scale-95 transition-transform"
-          aria-label="BriefCraft AI Home"
+        <header
+          className="pointer-events-auto w-full max-w-md liquid-glass-dock liquid-glass-dock-chroma specular-highlight flex items-center justify-between px-3.5 py-1.5 rounded-full border border-zinc-200 dark:border-white/15 shadow-xl transition-all"
+          style={{ contain: "layout paint" }}
         >
-          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 via-purple-500 to-cyan-400 flex items-center justify-center text-white shadow-sm shadow-indigo-500/25">
-            <Sparkles className="w-4 h-4" />
-          </div>
-          <span className="font-bold tracking-tight text-sm text-zinc-900 dark:text-white">
-            BriefCraft <span className="text-indigo-600 dark:text-indigo-400 font-extrabold">AI</span>
-          </span>
-          {activeBrief?.clientName && (
-            <span className="text-[10px] text-zinc-500 truncate max-w-[100px] border-l border-zinc-200 dark:border-white/10 pl-2 ml-0.5">
-              {activeBrief.clientName}
-            </span>
-          )}
-        </button>
-
-        {/* Minimal Secondary Utility: Theme toggle with minimum 44x44px touch target */}
-        <div className="flex items-center gap-1">
+          {/* Left Brand Identity */}
           <button
-            onClick={toggleTheme}
-            className="w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white active:scale-95 transition-all"
-            aria-label="Toggle theme"
-            title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+            onClick={resetActiveBrief}
+            className="flex items-center gap-2 text-left focus:outline-none min-h-[40px] py-1 active:scale-95 transition-transform"
+            aria-label="BriefCraft AI Home"
           >
-            {theme === "dark" ? (
-              <Sun className="w-4 h-4 text-amber-400" />
-            ) : (
-              <Moon className="w-4 h-4 text-indigo-600" />
-            )}
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 via-purple-500 to-cyan-400 flex items-center justify-center text-white shadow-md shadow-indigo-500/25 shrink-0">
+              <Sparkles className="w-4 h-4" />
+            </div>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="font-bold tracking-tight text-sm text-zinc-900 dark:text-white whitespace-nowrap">
+                BriefCraft <span className="text-indigo-600 dark:text-indigo-400 font-extrabold">AI</span>
+              </span>
+              {activeBrief?.clientName ? (
+                <span className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate max-w-[90px] border-l border-zinc-300 dark:border-white/15 pl-1.5">
+                  {activeBrief.clientName}
+                </span>
+              ) : (
+                <span className="text-[9px] uppercase font-mono px-1.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-500/15 text-indigo-700 dark:text-indigo-400 font-semibold border border-indigo-200 dark:border-indigo-500/30 whitespace-nowrap">
+                  2026
+                </span>
+              )}
+            </div>
           </button>
-        </div>
-      </motion.header>
+
+          {/* Right Action Utilities in Pill */}
+          <div className="flex items-center gap-1">
+            {/* New brief button */}
+            <button
+              onClick={resetActiveBrief}
+              className="w-9 h-9 min-w-[36px] min-h-[36px] flex items-center justify-center rounded-full text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/10 active:scale-90 transition-all touch-manipulation"
+              title="New Brief"
+              aria-label="Start new brief"
+            >
+              <PlusCircle className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+            </button>
+
+            {/* Settings Modal with custom key status */}
+            <button
+              onClick={() => setIsSettingsOpen(true)}
+              className="relative w-9 h-9 min-w-[36px] min-h-[36px] flex items-center justify-center rounded-full text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/10 active:scale-90 transition-all touch-manipulation"
+              title="Settings & Key"
+              aria-label="Engine Settings"
+            >
+              <Settings className="w-4 h-4" />
+              {settings.customApiKey && (
+                <span
+                  className="absolute top-2 right-2 w-2 h-2 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50"
+                  title="Personal API Key active"
+                />
+              )}
+            </button>
+
+            {/* Theme toggle */}
+            <button
+              onClick={toggleTheme}
+              className="w-9 h-9 min-w-[36px] min-h-[36px] flex items-center justify-center rounded-full text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/10 active:scale-90 transition-all touch-manipulation"
+              aria-label="Toggle theme"
+              title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+            >
+              {theme === "dark" ? (
+                <Sun className="w-4 h-4 text-amber-400" />
+              ) : (
+                <Moon className="w-4 h-4 text-indigo-600" />
+              )}
+            </button>
+          </div>
+        </header>
+      </div>
 
       {/* Desktop Floating Condensing Glass Top Navbar */}
       <header className="sticky top-0 z-40 w-full px-4 sm:px-6 lg:px-8 pt-3 hidden md:block">

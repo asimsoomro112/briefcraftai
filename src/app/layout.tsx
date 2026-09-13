@@ -51,7 +51,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col transition-colors duration-200 selection:bg-indigo-500/30 selection:text-white">
         <SvgFilters />
         <AppProvider>
-          <div className="relative min-h-[100dvh] flex flex-col pb-24 md:pb-12">
+          <div className="relative min-h-[100dvh] flex flex-col pt-16 md:pt-0 pb-24 md:pb-12">
             <Navbar />
             <main className="flex-1 w-full">{children}</main>
             <footer className="w-full py-6 px-4 text-center text-xs text-zinc-500 dark:text-zinc-400 border-t border-zinc-200 dark:border-white/5 mt-12 hidden md:block">
